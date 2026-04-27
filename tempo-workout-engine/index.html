@@ -2,11 +2,123 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tempo Workout Engine</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#121212" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Tempo" />
+  <title>Tempo v5.6</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
-  <h1>Tempo Workout Engine</h1>
-  <p>Project initialised. Replace this file with your full app code.</p>
+<body id="body">
+  <div id="ariaAnnouncer" class="sr-only" aria-live="assertive"></div>
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <main class="app">
+    <header class="brand-bar">
+      <h1 class="brand-name">TEMPO <span id="syncBadge" class="sync-badge" aria-hidden="true"></span></h1>
+    </header>
+
+    <section id="setup">
+      <div class="dashboard">
+        <div id="resumeCard" class="panel highlight hidden">
+          <h3>Resume Workout</h3>
+          <h1 id="resumeName" class="text-high mb-sm">Active Session</h1>
+          <div class="flex flex-row gap-sm mt-md">
+            <button class="primary flex-2" type="button" onclick="resumeSession()">Resume</button>
+            <button class="secondary flex-1" type="button" onclick="clearResumeState()">Dismiss</button>
+          </div>
+        </div>
+
+        <div class="panel hero-panel">
+          <h3>Active Routine</h3>
+          <h1 class="text-high">Ready to Move?</h1>
+          <p class="text-muted">High-performance core strength sessions with voice coaching and hands-free control.</p>
+          <button id="mainStartBtn" class="primary w-full mt-lg" type="button" onclick="loadExample()">Start Session</button>
+        </div>
+
+        <div class="panel">
+          <h3 class="mb-md">Controls</h3>
+          <div class="flex flex-col gap-sm">
+            <button class="secondary" type="button" onclick="pushStateAndShow('vaultDialog')">Saved Routines</button>
+            <button class="secondary" type="button" onclick="openBuilder()">Create Routine</button>
+            <button class="secondary" type="button" onclick="pushStateAndShow('settingsDialog')">Settings</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div id="workoutContainer" class="workout-container hidden w-full">
+      <section id="workoutView"></section>
+      <div id="stickyControls" class="sticky-bar">
+        <button class="secondary" type="button" onclick="skip()">Skip</button>
+        <button id="pauseBtn" class="primary" type="button" onclick="togglePause()">Pause</button>
+        <button class="danger" type="button" onclick="confirmEndSession()">End</button>
+      </div>
+    </div>
+
+    <dialog id="previewDialog" class="overlay-panel text-center">
+      <h2 id="previewTitle" class="text-high m-0">Preview</h2>
+      <div class="infoGrid mb-md">
+        <div class="black-box"><b id="previewMovements">0</b><span>Moves</span></div>
+        <div class="black-box"><b id="previewTime">0m</b><span>Time</span></div>
+      </div>
+      <div id="previewList" class="black-box text-left text-muted mb-md preview-list"></div>
+      <div class="flex flex-row gap-sm mt-md">
+        <button class="primary flex-2" type="button" onclick="confirmStartPreview()">Start Session</button>
+        <button class="secondary flex-1" type="button" onclick="closeOverlay('previewDialog')">Back</button>
+      </div>
+    </dialog>
+
+    <dialog id="vaultDialog" class="overlay-panel">
+      <h2>My Routines</h2>
+      <div id="vaultList" class="mb-md"></div>
+      <button class="primary w-full mb-md" type="button" onclick="restoreDefaults()">Restore Defaults</button>
+      <button class="secondary w-full" type="button" onclick="closeOverlay('vaultDialog')">Close Library</button>
+    </dialog>
+
+    <dialog id="customDialog" class="overlay-panel">
+      <h2>Create Routine</h2>
+      <input type="text" id="routineName" placeholder="Routine Name" class="mb-sm form-control" />
+      <textarea id="customList" class="routine-editor" placeholder="e.g. Plank, 30, 10"></textarea>
+      <div id="routinePreview" class="black-box mt-sm mb-md text-muted small-text">Enter movements...</div>
+      <div class="flex flex-row gap-sm">
+        <button id="btnSaveRoutine" class="primary flex-2" type="button" onclick="saveAndStartCustom()" disabled>Save & Preview</button>
+        <button class="secondary flex-1" type="button" onclick="closeOverlay('customDialog')">Cancel</button>
+      </div>
+    </dialog>
+
+    <dialog id="settingsDialog" class="overlay-panel">
+      <h2>Settings</h2>
+      <div class="black-box mb-md">
+        <label class="font-bold text-muted block mb-xs" for="audioProfile">Audio Profile</label>
+        <select id="audioProfile" class="mb-md form-control">
+          <option value="full">Full (Voice + Chimes)</option>
+          <option value="voice">Voice Only</option>
+          <option value="sound">Sound Only</option>
+          <option value="silent">Silent</option>
+        </select>
+        <label class="font-bold text-muted block mb-xs" for="volumeControl">Volume</label>
+        <input id="volumeControl" type="range" min="0" max="100" value="70" class="w-full mb-md" />
+      </div>
+      <button class="primary w-full" type="button" onclick="saveSettings()">Save & Close</button>
+    </dialog>
+
+    <dialog id="confirmDialog" class="overlay-panel text-center">
+      <h2 class="text-danger">Exit Session?</h2>
+      <p id="confirmText" class="text-muted mb-lg">Progress will not be saved.</p>
+      <div class="flex flex-row gap-sm">
+        <button id="confirmYesBtn" class="danger flex-1" type="button" onclick="executeConfirm()">Yes, End</button>
+        <button class="secondary flex-1" type="button" onclick="closeOverlay('confirmDialog')">Cancel</button>
+      </div>
+    </dialog>
+  </main>
+
+  <script src="app.js" defer></script>
 </body>
 </html>
