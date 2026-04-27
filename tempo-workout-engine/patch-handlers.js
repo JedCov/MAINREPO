@@ -8,15 +8,28 @@
   };
 
   window.applyTempoSplitRoutines = function () {
-    const routines = window.tempoSplitRoutines;
-    localStorage.setItem('tempo_vault', JSON.stringify(routines));
-    localStorage.setItem('tempo_default_routine_version', '5.8.8-workout-splits');
+    const splitRoutines = window.tempoSplitRoutines;
+    let existingVault = {};
+
+    try {
+      existingVault = JSON.parse(localStorage.getItem('tempo_vault') || '{}') || {};
+    } catch (error) {
+      existingVault = {};
+    }
+
+    const mergedVault = Object.assign({}, splitRoutines, existingVault);
+    Object.keys(splitRoutines).forEach(function (name) {
+      mergedVault[name] = splitRoutines[name];
+    });
+
+    localStorage.setItem('tempo_vault', JSON.stringify(mergedVault));
+    localStorage.setItem('tempo_default_routine_version', '5.8.13-workout-splits-merge');
 
     const vaultList = document.getElementById('vaultList');
     if (!vaultList) return;
 
-    vaultList.innerHTML = Object.keys(routines).map(function (name) {
-      return '<div class="vault-item"><span class="font-bold">' + name + '</span><button class="primary btn-small" type="button" data-split-routine="' + name + '">Play</button></div>';
+    vaultList.innerHTML = Object.keys(mergedVault).map(function (name) {
+      return '<div class="vault-item"><span class="font-bold">' + name + '</span><button class="primary btn-small" type="button" data-routine-name="' + name + '">Play</button></div>';
     }).join('');
   };
 
@@ -138,6 +151,20 @@ document.addEventListener('click', function (event) {
   const button = event.target.closest('button');
   if (!button) return;
 
+  if (button.dataset && button.dataset.routineName) {
+    const name = button.dataset.routineName;
+    let vault = {};
+    try {
+      vault = JSON.parse(localStorage.getItem('tempo_vault') || '{}') || {};
+    } catch (error) {
+      vault = {};
+    }
+    const text = vault[name] || (window.tempoSplitRoutines && window.tempoSplitRoutines[name]);
+    if (window.showPreview && text) window.showPreview(name, text);
+    event.preventDefault();
+    return;
+  }
+
   if (button.dataset && button.dataset.splitRoutine) {
     const name = button.dataset.splitRoutine;
     const text = window.tempoSplitRoutines && window.tempoSplitRoutines[name];
@@ -153,9 +180,9 @@ document.addEventListener('click', function (event) {
     settingsBtn: function () { window.pushStateAndShow && window.pushStateAndShow('settingsDialog'); },
     previewStartBtn: function () { window.confirmStartPreview && window.confirmStartPreview(); },
     previewBackBtn: function () { window.closeOverlay && window.closeOverlay('previewDialog'); },
-    restoreDefaultsBtn: function () { window.applyTempoSplitRoutines && window.applyTempoSplitRoutines(); },
+    restoreDefaultsBtn: function () { window.restoreDefaults ? window.restoreDefaults() : (window.applyTempoSplitRoutines && window.applyTempoSplitRoutines()); },
     closeVaultBtn: function () { window.closeOverlay && window.closeOverlay('vaultDialog'); },
-    btnSaveRoutine: function () { window.saveTempoQuickRoutine && window.saveTempoQuickRoutine(); },
+    btnSaveRoutine: function () { window.saveAndStartCustom ? window.saveAndStartCustom() : (window.saveTempoQuickRoutine && window.saveTempoQuickRoutine()); },
     cancelBuilderBtn: function () { window.closeOverlay && window.closeOverlay('customDialog'); },
     saveSettingsBtn: function () { window.saveSettings && window.saveSettings(); },
     skipBtn: function () { window.skip && window.skip(); },
