@@ -4,9 +4,9 @@ const $ = id => document.getElementById(id);
 const dom = {};
 
 const defaults = {
-  '4-Minute Core Session': 'Abdominal Crunches, 30, 10\nHundreds, 30, 10\nRoll-Like-A-Ball, 30, 10\nAbdominal Leg Raises, 30, 10\nLeg-To-Chest Raises, 30, 10\nCobra Pose, 30, 10\nPlank, 30, 0',
-  'Monday: Biceps & Triceps': 'Pushups, 30, 15\nBicep Curls, 30, 15\nTricep Dips, 30, 0',
-  'Strength Intro': 'Pushups, 30, 15\nGoblet Squat, 30, 15\nPlank, 45, 15\nLunges, 30, 0'
+  'Monday: Biceps & Triceps': 'Dumbbell Curls, 30, 10\nOverhead Tricep Extension, 30, 10\nHammer Curls, 30, 10\nClose-Grip Incline Pushups, 30, 10\nTricep Kickbacks, 30, 10\nChair Dips, 30, 0',
+  'Wednesday: Shoulders & Back': 'Arnold Press, 30, 10\nOne-Arm Bench Row, 30, 10\nLateral Raises, 30, 10\nRear-Delt Fly, 30, 10\nFront Raises, 30, 10\nUpright Row With Broomstick, 30, 0',
+  'Friday: Legs & Chest': 'Goblet Squats, 30, 10\nFeet-Elevated Pushups, 30, 10\nSplit Squats, 30, 10\nSlow-Tempo Pushups, 30, 10\nRomanian Deadlift, 30, 10\nWide-Grip Pushups, 30, 0'
 };
 
 let vault = {};
@@ -106,7 +106,8 @@ function showPreview(name, text) {
 }
 
 function loadExample() {
-  showPreview('4-Minute Core Session', vault['4-Minute Core Session']);
+  const firstRoutine = Object.keys(vault)[0] || Object.keys(defaults)[0];
+  showPreview(firstRoutine, vault[firstRoutine] || defaults[firstRoutine]);
 }
 
 function confirmStartPreview() {
@@ -453,6 +454,7 @@ Object.assign(window, {
   togglePause,
   confirmEndSession,
   executeConfirm,
-  backToSetup
+  backToSetup,
+  showPreview
 });
 document.addEventListener('DOMContentLoaded', boot);
