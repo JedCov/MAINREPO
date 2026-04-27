@@ -36,31 +36,39 @@
     });
   }
 
+  function normaliseExerciseName(name) {
+    return titleCase(String(name || '').trim()
+      .replace(/^and\s+/, '')
+      .replace(/\s+/g, ' '));
+  }
+
   function quickParseRoutine(rawText) {
     const raw = String(rawText || '').trim();
     if (!raw) return '';
-
     if (raw.indexOf(',') !== -1) return raw;
 
     let text = raw.toLowerCase();
+    text = text.replace(/super\s*set/g, 'superset');
     text = text.replace(/chip ups/g, 'chin ups');
+    text = text.replace(/chinups/g, 'chin ups');
     text = text.replace(/pullups/g, 'pull ups');
     text = text.replace(/pushups/g, 'push ups');
-    text = text.replace(/\s+/g, ' ');
+    text = text.replace(/\s+/g, ' ').trim();
 
     const setMatch = text.match(/(\d+)\s*sets?/);
     const sets = setMatch ? Math.max(1, parseInt(setMatch[1], 10)) : 1;
     text = text.replace(/\d+\s*sets?/g, '').trim();
     text = text.replace(/^superset\s*/, '').trim();
 
-    const matches = Array.from(text.matchAll(/(\d+)\s+([a-z][a-z\s-]*?)(?=\s+and\s+\d+|$)/g));
+    const matches = Array.from(text.matchAll(/(\d+)\s+([^0-9]+?)(?=\s+\d+\s+|$)/g));
     if (!matches.length) return raw;
 
     const movements = matches.map(function (match) {
-      const reps = parseInt(match[1], 10);
-      const name = titleCase(match[2].replace(/^and\s+/, '').trim());
-      return { reps, name };
-    }).filter(function (movement) { return movement.name; });
+      return {
+        reps: parseInt(match[1], 10),
+        name: normaliseExerciseName(match[2])
+      };
+    }).filter(function (movement) { return movement.name && movement.reps; });
 
     if (!movements.length) return raw;
 
@@ -76,28 +84,54 @@
     return lines.join('\n');
   }
 
-  window.saveTempoQuickRoutine = function () {
-    const nameEl = document.getElementById('routineName');
+  function setRoutinePreview(message) {
+    const preview = document.getElementById('routinePreview');
+    if (preview) preview.textContent = message;
+  }
+
+  function enableQuickSaveIfNeeded() {
     const listEl = document.getElementById('customList');
-    const name = nameEl && nameEl.value.trim() ? nameEl.value.trim() : 'Custom Routine';
+    const saveBtn = document.getElementById('btnSaveRoutine');
+    if (!listEl || !saveBtn) return;
+
+    const converted = quickParseRoutine(listEl.value);
+    const isValid = converted && converted.indexOf(',') !== -1;
+    if (isValid) {
+      saveBtn.disabled = false;
+      const count = converted.split('\n').filter(Boolean).length;
+      setRoutinePreview(count + ' moves detected.');
+    }
+  }
+
+  window.saveTempoQuickRoutine = function () {
+    const listEl = document.getElementById('customList');
     const converted = quickParseRoutine(listEl ? listEl.value : '');
 
-    if (!converted) return;
+    if (!converted || converted.indexOf(',') === -1) {
+      setRoutinePreview('Use: Exercise, seconds, rest or Superset 8 chin ups 12 pushups 3 sets');
+      return;
+    }
 
     if (listEl) {
       listEl.value = converted;
       listEl.dispatchEvent(new Event('input', { bubbles: true }));
     }
 
-    if (window.saveAndStartCustom) {
-      window.saveAndStartCustom();
-      return;
-    }
+    const saveBtn = document.getElementById('btnSaveRoutine');
+    if (saveBtn) saveBtn.disabled = false;
 
-    const vault = JSON.parse(localStorage.getItem('tempo_vault') || '{}');
-    vault[name] = converted;
-    localStorage.setItem('tempo_vault', JSON.stringify(vault));
+    if (window.saveAndStartCustom) window.saveAndStartCustom();
   };
+
+  document.addEventListener('input', function (event) {
+    if (event.target && event.target.id === 'customList') {
+      setTimeout(enableQuickSaveIfNeeded, 0);
+    }
+  }, true);
+
+  document.addEventListener('DOMContentLoaded', function () {
+    setTimeout(enableQuickSaveIfNeeded, 250);
+  });
 })();
 
 document.addEventListener('click', function (event) {
