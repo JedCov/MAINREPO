@@ -50,6 +50,64 @@ function parse(text) {
   return exercises;
 }
 
+function titleCase(text) {
+  return String(text || '').replace(/\w\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
+}
+
+function normaliseQuickRoutineText(text) {
+  return String(text || '')
+    .toLowerCase()
+    .replace(/super\s*set/g, 'superset')
+    .replace(/chip ups/g, 'chin ups')
+    .replace(/chinups/g, 'chin ups')
+    .replace(/pullups/g, 'pull ups')
+    .replace(/pushups/g, 'push ups')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseNaturalRoutine(text) {
+  const raw = String(text || '').trim();
+  if (!raw || raw.includes(',')) return parse(raw);
+
+  let normalised = normaliseQuickRoutineText(raw);
+  const setMatch = normalised.match(/(\d+)\s*sets?/);
+  const sets = setMatch ? Math.max(1, parseInt(setMatch[1], 10)) : 1;
+
+  normalised = normalised
+    .replace(/\d+\s*sets?/g, '')
+    .replace(/^superset\s*/, '')
+    .trim();
+
+  const matches = Array.from(normalised.matchAll(/(\d+)\s+([^0-9]+?)(?=\s+\d+\s+|$)/g));
+  if (!matches.length) return [];
+
+  const movements = matches.map(match => ({
+    reps: parseInt(match[1], 10),
+    name: titleCase(match[2].replace(/^and\s+/, '').trim())
+  })).filter(movement => movement.reps && movement.name);
+
+  const exercises = [];
+  for (let set = 1; set <= sets; set += 1) {
+    movements.forEach((movement, movementIndex) => {
+      const isLast = set === sets && movementIndex === movements.length - 1;
+      exercises.push({
+        name: `Set ${set}: ${movement.name}`,
+        duration: Math.max(20, Math.min(60, movement.reps * 3)),
+        rest: isLast ? 0 : 10
+      });
+    });
+  }
+
+  return exercises;
+}
+
+function countRoutineEntries(text) {
+  const commaCount = parse(text).length;
+  if (commaCount > 0) return commaCount;
+  return parseNaturalRoutine(text).length;
+}
+
 function toast(message) {
   dom.toast.textContent = message;
   dom.toast.classList.add('show');
@@ -84,7 +142,8 @@ function populateVaultUI() {
 }
 
 function showPreview(name, text) {
-  const exercises = parse(text);
+  let exercises = parse(text);
+  if (!exercises.length) exercises = parseNaturalRoutine(text);
 
   if (!exercises.length) {
     toast('Invalid routine format.');
@@ -338,7 +397,7 @@ function openBuilder() {
 }
 
 function validateAndPreview() {
-  const count = parse(dom.customList.value).length;
+  const count = countRoutineEntries(dom.customList.value);
   dom.btnSaveRoutine.disabled = count === 0;
   dom.routinePreview.textContent = count
     ? `${count} moves detected.`
@@ -349,7 +408,7 @@ function saveAndStartCustom() {
   const name = dom.routineName.value.trim() || 'Custom Routine';
   const text = dom.customList.value.trim();
 
-  if (!parse(text).length) {
+  if (!parse(text).length && !parseNaturalRoutine(text).length) {
     toast('Add at least one movement.');
     return;
   }
@@ -455,6 +514,8 @@ Object.assign(window, {
   confirmEndSession,
   executeConfirm,
   backToSetup,
-  showPreview
+  showPreview,
+  validateAndPreview,
+  parseNaturalRoutine
 });
 document.addEventListener('DOMContentLoaded', boot);
