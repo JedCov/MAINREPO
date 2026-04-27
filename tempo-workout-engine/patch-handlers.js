@@ -1,25 +1,30 @@
-document.addEventListener('DOMContentLoaded', function () {
-  const bind = (id, fn) => {
-    const el = document.getElementById(id);
-    if (el && typeof fn === 'function') el.addEventListener('click', fn);
+document.addEventListener('click', function (event) {
+  const button = event.target.closest('button');
+  if (!button) return;
+
+  const actions = {
+    mainStartBtn: function () { window.loadExample && window.loadExample(); },
+    vaultBtn: function () { window.pushStateAndShow && window.pushStateAndShow('vaultDialog'); },
+    builderBtn: function () { window.openBuilder && window.openBuilder(); },
+    settingsBtn: function () { window.pushStateAndShow && window.pushStateAndShow('settingsDialog'); },
+    previewStartBtn: function () { window.confirmStartPreview && window.confirmStartPreview(); },
+    previewBackBtn: function () { window.closeOverlay && window.closeOverlay('previewDialog'); },
+    restoreDefaultsBtn: function () { window.restoreDefaults && window.restoreDefaults(); },
+    closeVaultBtn: function () { window.closeOverlay && window.closeOverlay('vaultDialog'); },
+    btnSaveRoutine: function () { window.saveAndStartCustom && window.saveAndStartCustom(); },
+    cancelBuilderBtn: function () { window.closeOverlay && window.closeOverlay('customDialog'); },
+    saveSettingsBtn: function () { window.saveSettings && window.saveSettings(); },
+    skipBtn: function () { window.skip && window.skip(); },
+    pauseBtn: function () { window.togglePause && window.togglePause(); },
+    endBtn: function () { window.confirmEndSession && window.confirmEndSession(); },
+    confirmYesBtn: function () { window.executeConfirm && window.executeConfirm(); },
+    confirmCancelBtn: function () { window.closeOverlay && window.closeOverlay('confirmDialog'); },
+    resumeBtn: function () { window.resumeSession && window.resumeSession(); },
+    dismissResumeBtn: function () { window.clearResumeState && window.clearResumeState(); }
   };
 
-  bind('mainStartBtn', window.loadExample);
-  bind('vaultBtn', () => window.pushStateAndShow('vaultDialog'));
-  bind('builderBtn', window.openBuilder);
-  bind('settingsBtn', () => window.pushStateAndShow('settingsDialog'));
-  bind('previewStartBtn', window.confirmStartPreview);
-  bind('previewBackBtn', () => window.closeOverlay('previewDialog'));
-  bind('restoreDefaultsBtn', window.restoreDefaults);
-  bind('closeVaultBtn', () => window.closeOverlay('vaultDialog'));
-  bind('btnSaveRoutine', window.saveAndStartCustom);
-  bind('cancelBuilderBtn', () => window.closeOverlay('customDialog'));
-  bind('saveSettingsBtn', window.saveSettings);
-  bind('skipBtn', window.skip);
-  bind('pauseBtn', window.togglePause);
-  bind('endBtn', window.confirmEndSession);
-  bind('confirmYesBtn', window.executeConfirm);
-  bind('confirmCancelBtn', () => window.closeOverlay('confirmDialog'));
-  bind('resumeBtn', window.resumeSession);
-  bind('dismissResumeBtn', window.clearResumeState);
+  const action = actions[button.id];
+  if (!action) return;
+  event.preventDefault();
+  action();
 });
