@@ -1,0 +1,13 @@
+# General
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Node (if you expand later)
+node_modules/
+
+# Env
+.env
