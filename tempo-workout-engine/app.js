@@ -438,5 +438,21 @@ function boot() {
   dom.customList.addEventListener('input', validateAndPreview);
   dom.routineName.addEventListener('input', validateAndPreview);
 }
-
+Object.assign(window, {
+  loadExample,
+  confirmStartPreview,
+  pushStateAndShow,
+  closeOverlay,
+  openBuilder,
+  saveAndStartCustom,
+  restoreDefaults,
+  saveSettings,
+  resumeSession,
+  clearResumeState,
+  skip,
+  togglePause,
+  confirmEndSession,
+  executeConfirm,
+  backToSetup
+});
 document.addEventListener('DOMContentLoaded', boot);
