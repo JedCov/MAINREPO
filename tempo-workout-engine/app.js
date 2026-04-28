@@ -12,6 +12,14 @@ const defaults = {
   'Legacy: Wednesday Dumbbell Split': 'Arnold Press, 30, 10\nOne-Arm Bench Row, 30, 10\nLateral Raises, 30, 10\nRear-Delt Fly, 30, 10\nFront Raises, 30, 10\nUpright Row With Broomstick, 30, 0',
   'Legacy: Friday Dumbbell Split': 'Goblet Squats, 30, 10\nFeet-Elevated Pushups, 30, 10\nSplit Squats, 30, 10\nSlow-Tempo Pushups, 30, 10\nRomanian Deadlift, 30, 10\nWide-Grip Pushups, 30, 0'
 };
+const LEGACY_ROUTINE_NAMES = new Set([
+  'Legacy: Monday Dumbbell Split',
+  'Legacy: Wednesday Dumbbell Split',
+  'Legacy: Friday Dumbbell Split',
+  'Monday: Biceps & Triceps',
+  'Wednesday: Shoulders & Back',
+  'Friday: Legs & Chest'
+]);
 
 let vault = {};
 let routine = null;
@@ -119,19 +127,30 @@ function toast(message) {
 }
 
 function loadVaultData() {
+  let storedVault = {};
+
   try {
-    vault = JSON.parse(localStorage.getItem('tempo_vault')) || {};
+    storedVault = JSON.parse(localStorage.getItem('tempo_vault')) || {};
   } catch {
-    vault = {};
+    storedVault = {};
   }
 
-  vault = { ...defaults, ...vault };
+  Object.keys(storedVault).forEach(name => {
+    if (LEGACY_ROUTINE_NAMES.has(name)) {
+      delete storedVault[name];
+    }
+  });
+
+  vault = { ...storedVault };
+  vault[MAIN_DEFAULT_NAME] = MAIN_DEFAULT_TEXT;
   localStorage.setItem('tempo_vault', JSON.stringify(vault));
   populateVaultUI();
 }
 
 function populateVaultUI() {
-  dom.vaultList.innerHTML = Object.keys(vault).map(name => `
+  const routineNames = Object.keys(vault).filter(name => !LEGACY_ROUTINE_NAMES.has(name));
+
+  dom.vaultList.innerHTML = routineNames.map(name => `
     <div class="vault-item">
       <span class="font-bold">${clean(name)}</span>
       <button class="primary btn-small" type="button" data-routine-key="${encodeURIComponent(name)}">Play</button>
@@ -170,6 +189,7 @@ function showPreview(name, text) {
 }
 
 function loadExample() {
+  selected = null;
   showPreview(MAIN_DEFAULT_NAME, MAIN_DEFAULT_TEXT);
 }
 
@@ -426,10 +446,9 @@ function saveAndStartCustom() {
 }
 
 function restoreDefaults() {
-  vault = { ...defaults };
+  vault = { [MAIN_DEFAULT_NAME]: MAIN_DEFAULT_TEXT };
   localStorage.setItem('tempo_vault', JSON.stringify(vault));
   populateVaultUI();
-  toast('Defaults restored');
 }
 
 function confirmEndSession() {
