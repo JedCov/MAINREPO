@@ -34,6 +34,39 @@ let startedAt = 0;
 let lastTick = null;
 let selected = null;
 let confirmAction = null;
+let wakeLockSentinel = null;
+const activeOverlays = new Set();
+
+function isWorkoutActive() {
+  return mode === 'ready' || mode === 'exercise' || mode === 'rest';
+}
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator) || !navigator.wakeLock || !navigator.wakeLock.request) return;
+  if (!isWorkoutActive() || document.visibilityState !== 'visible') return;
+  if (wakeLockSentinel) return;
+
+  try {
+    wakeLockSentinel = await navigator.wakeLock.request('screen');
+    wakeLockSentinel.addEventListener('release', () => {
+      wakeLockSentinel = null;
+    });
+  } catch (error) {
+    wakeLockSentinel = null;
+  }
+}
+
+async function releaseWakeLock() {
+  if (!wakeLockSentinel) return;
+
+  try {
+    await wakeLockSentinel.release();
+  } catch (error) {
+    // Wake lock may already be released by the browser.
+  } finally {
+    wakeLockSentinel = null;
+  }
+}
 
 function clean(text) {
   return String(text).replace(/[&<>"']/g, char => ({
@@ -213,6 +246,7 @@ function startWorkout(data) {
   dom.setup.classList.add('hidden');
   dom.workoutContainer.classList.remove('hidden');
 
+  requestWakeLock();
   startPhase(10);
   render();
 }
@@ -291,6 +325,7 @@ function showRest() {
 function finishWorkout() {
   clearInterval(timer);
   mode = 'complete';
+  releaseWakeLock();
   render();
 }
 
@@ -379,6 +414,7 @@ function skip() {
 
 function backToSetup() {
   clearInterval(timer);
+  releaseWakeLock();
 
   routine = null;
   index = -1;
@@ -395,6 +431,7 @@ function showDialog(id) {
 
   if (dialog && !dialog.open) {
     dialog.showModal();
+    activeOverlays.add(id);
   }
 }
 
@@ -404,14 +441,40 @@ function closeDialog(id) {
   if (dialog && dialog.open) {
     dialog.close();
   }
+  activeOverlays.delete(id);
 }
 
 function pushStateAndShow(id) {
   showDialog(id);
+  if (activeOverlays.has(id)) {
+    history.pushState({ tempoOverlay: id }, '', location.href);
+  }
 }
 
 function closeOverlay(id) {
   closeDialog(id);
+
+  const state = history.state;
+  if (state && state.tempoOverlay === id) {
+    history.back();
+  }
+}
+
+function closeAllOverlays() {
+  Array.from(activeOverlays).forEach(id => closeDialog(id));
+}
+
+function handleBackNavigation() {
+  closeAllOverlays();
+}
+
+function handleVisibilityWakeLock() {
+  if (document.visibilityState === 'visible') {
+    requestWakeLock();
+    return;
+  }
+
+  releaseWakeLock();
 }
 
 function openBuilder() {
@@ -521,6 +584,15 @@ function boot() {
 
   dom.customList.addEventListener('input', validateAndPreview);
   dom.routineName.addEventListener('input', validateAndPreview);
+  ['previewDialog', 'vaultDialog', 'customDialog', 'settingsDialog', 'confirmDialog'].forEach(id => {
+    const dialog = $(id);
+    if (!dialog) return;
+    dialog.addEventListener('close', () => {
+      activeOverlays.delete(id);
+    });
+  });
+  window.addEventListener('popstate', handleBackNavigation);
+  document.addEventListener('visibilitychange', handleVisibilityWakeLock);
 }
 Object.assign(window, {
   loadExample,
