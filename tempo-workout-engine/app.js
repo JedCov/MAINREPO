@@ -96,6 +96,14 @@ function parse(text) {
   return exercises;
 }
 
+function clampDuration(value) {
+  return Math.max(1, parseInt(value, 10) || 30);
+}
+
+function clampRest(value) {
+  return Math.max(0, parseInt(value, 10) || 0);
+}
+
 function titleCase(text) {
   return String(text || '').replace(/\w\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
 }
@@ -148,10 +156,229 @@ function parseNaturalRoutine(text) {
   return exercises;
 }
 
+function parseNaturalLanguageLine(line) {
+  const warnings = [];
+  const source = String(line || '').trim();
+  if (!source) return { exercises: [], warnings };
+
+  const cleanLine = source
+    .replace(/^[•*\-\d.)\s]+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleanLine) return { exercises: [], warnings };
+
+  const lower = cleanLine.toLowerCase();
+  const setMatch = lower.match(/(\d+)\s*sets?/);
+  const declaredSets = setMatch ? Math.max(1, parseInt(setMatch[1], 10) || 1) : 1;
+
+  const repPatterns = [];
+  let repMatch;
+  const compactRepRegex = /([a-z][a-z\s-]*?)\s+(\d+)\s*x\s*(\d+)/gi;
+  while ((repMatch = compactRepRegex.exec(lower))) {
+    repPatterns.push({
+      rawName: repMatch[1],
+      sets: Math.max(1, parseInt(repMatch[2], 10) || 1),
+      reps: Math.max(1, parseInt(repMatch[3], 10) || 1)
+    });
+  }
+
+  if (!repPatterns.length) {
+    const andRepRegex = /(\d+)\s+([a-z][a-z\s-]*?)(?=(?:\s+and\s+\d+\s+[a-z])|,|$)/gi;
+    while ((repMatch = andRepRegex.exec(lower))) {
+      repPatterns.push({
+        rawName: repMatch[2],
+        sets: declaredSets,
+        reps: Math.max(1, parseInt(repMatch[1], 10) || 1)
+      });
+    }
+  }
+
+  if (repPatterns.length) {
+    const exercises = [];
+    const cleanedPatterns = repPatterns
+      .map(pattern => ({
+        sets: pattern.sets,
+        reps: pattern.reps,
+        name: titleCase(
+          pattern.rawName
+            .replace(/^superset\s+/, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+        )
+      }))
+      .filter(pattern => pattern.name);
+
+    const rounds = cleanedPatterns.reduce((max, movement) => Math.max(max, movement.sets), 1);
+    for (let round = 1; round <= rounds; round += 1) {
+      cleanedPatterns.forEach(movement => {
+        if (round > movement.sets) return;
+        exercises.push({
+          name: `${movement.name} (${movement.reps} reps)`,
+          duration: 30,
+          rest: null
+        });
+      });
+    }
+
+    warnings.push('Rep-based input detected. Using 30s work intervals.');
+    return { exercises, warnings };
+  }
+
+  let rest = null;
+  const restMatch = cleanLine.match(/(?:rest|break)\s*(?:for)?\s*(\d+)\s*(?:s|sec|secs|second|seconds)?/i)
+    || cleanLine.match(/,\s*(\d+)\s*(?:s|sec|secs|second|seconds)\s*rest/i);
+  if (restMatch) {
+    rest = clampRest(restMatch[1]);
+  }
+
+  let work = null;
+  let name = cleanLine;
+
+  let workMatch = cleanLine.match(/^(\d+)\s*(?:s|sec|secs|second|seconds)\s+(.+)$/i);
+  if (workMatch) {
+    work = clampDuration(workMatch[1]);
+    name = workMatch[2];
+  } else {
+    workMatch = cleanLine.match(/^(.+?)\s+for\s+(\d+)\s*(?:s|sec|secs|second|seconds)\b/i);
+    if (workMatch) {
+      name = workMatch[1];
+      work = clampDuration(workMatch[2]);
+    } else {
+      workMatch = cleanLine.match(/^(.+?)\s+(\d+)\s*(?:s|sec|secs|second|seconds)\b/i);
+      if (workMatch) {
+        name = workMatch[1];
+        work = clampDuration(workMatch[2]);
+      }
+    }
+  }
+
+  name = name
+    .replace(/,\s*\d+\s*(?:s|sec|secs|second|seconds)\s*rest.*$/i, '')
+    .replace(/\brest\b.*$/i, '')
+    .replace(/\bfor\s+\d+\s*(?:s|sec|secs|second|seconds)\b.*$/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!work) {
+    const fallbackDuration = cleanLine.match(/(\d+)\s*(?:s|sec|secs|second|seconds)\b/i);
+    if (fallbackDuration) {
+      work = clampDuration(fallbackDuration[1]);
+      warnings.push(`Interpreted "${source}" as ${work}s work.`);
+    }
+  }
+
+  if (!name) return { exercises: [], warnings: [`Could not identify movement in "${source}".`] };
+
+  if (!work) {
+    work = 30;
+    warnings.push(`No duration found for "${name}". Using 30s.`);
+  }
+
+  return {
+    exercises: [{
+      name: titleCase(name),
+      duration: clampDuration(work),
+      rest
+    }],
+    warnings
+  };
+}
+
+function parseRoutineText(text) {
+  const lines = String(text || '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  const exercises = [];
+  const warnings = [];
+
+  lines.forEach(line => {
+    if (line.includes(',')) {
+      const parsedComma = parse(line);
+      if (parsedComma.length) {
+        parsedComma.forEach(ex => exercises.push({
+          name: ex.name,
+          duration: clampDuration(ex.duration),
+          rest: clampRest(ex.rest)
+        }));
+      } else {
+        warnings.push(`Could not parse line: "${line}"`);
+      }
+      return;
+    }
+
+    const roundMatch = line.match(/^(\d+)\s*rounds?:\s*(.+)$/i);
+    if (roundMatch) {
+      const rounds = Math.max(1, parseInt(roundMatch[1], 10) || 1);
+      const chunk = roundMatch[2]
+        .split(',')
+        .map(item => item.trim())
+        .filter(Boolean);
+      const segmentExercises = [];
+
+      chunk.forEach(item => {
+        const parsed = parseNaturalLanguageLine(item);
+        parsed.warnings.forEach(w => warnings.push(w));
+        parsed.exercises.forEach(ex => segmentExercises.push(ex));
+      });
+
+      if (!segmentExercises.length) {
+        warnings.push(`No valid moves found in "${line}".`);
+        return;
+      }
+
+      for (let round = 0; round < rounds; round += 1) {
+        segmentExercises.forEach(ex => exercises.push({
+          name: ex.name,
+          duration: clampDuration(ex.duration),
+          rest: ex.rest
+        }));
+      }
+      return;
+    }
+
+    const parsed = parseNaturalLanguageLine(line);
+    parsed.warnings.forEach(w => warnings.push(w));
+    if (!parsed.exercises.length) {
+      warnings.push(`Could not parse line: "${line}"`);
+      return;
+    }
+
+    parsed.exercises.forEach(ex => exercises.push({
+      name: ex.name,
+      duration: clampDuration(ex.duration),
+      rest: ex.rest
+    }));
+  });
+
+  exercises.forEach((exercise, index) => {
+    if (!Number.isFinite(exercise.duration) || exercise.duration <= 0) {
+      exercise.duration = 30;
+    }
+    if (!Number.isFinite(exercise.rest)) {
+      exercise.rest = index === exercises.length - 1 ? 0 : 10;
+    }
+    exercise.rest = Math.max(0, exercise.rest);
+  });
+
+  return { exercises, warnings };
+}
+
+function normaliseRoutineText(exercises) {
+  return (exercises || []).map(exercise => [
+    exercise.name,
+    clampDuration(exercise.duration),
+    clampRest(exercise.rest)
+  ].join(', ')).join('\n');
+}
+
+function parseCustomExercises(text) {
+  return parseRoutineText(text).exercises;
+}
+
 function countRoutineEntries(text) {
-  const commaCount = parse(text).length;
-  if (commaCount > 0) return commaCount;
-  return parseNaturalRoutine(text).length;
+  return parseRoutineText(text).exercises.length;
 }
 
 function toast(message) {
@@ -200,8 +427,8 @@ function populateVaultUI() {
 }
 
 function showPreview(name, text) {
-  let exercises = parse(text);
-  if (!exercises.length) exercises = parseNaturalRoutine(text);
+  const parsed = parseRoutineText(text);
+  const exercises = parsed.exercises;
 
   if (!exercises.length) {
     toast('Invalid routine format.');
@@ -216,7 +443,7 @@ function showPreview(name, text) {
   dom.previewTime.textContent = `${Math.floor(total / 60)}m ${total % 60}s`;
 
   dom.previewList.innerHTML = exercises
-    .map(ex => `• ${clean(ex.name)} (${ex.duration}s)`)
+    .map(ex => `• ${clean(ex.name)} (${ex.duration}s work / ${ex.rest}s rest)`)
     .join('<br>');
 
   showDialog('previewDialog');
@@ -485,28 +712,46 @@ function openBuilder() {
 }
 
 function validateAndPreview() {
-  const count = countRoutineEntries(dom.customList.value);
+  const parsed = parseRoutineText(dom.customList.value);
+  const count = parsed.exercises.length;
   dom.btnSaveRoutine.disabled = count === 0;
-  dom.routinePreview.textContent = count
-    ? `${count} moves detected.`
-    : 'Enter movements...';
+
+  if (!count) {
+    dom.routinePreview.textContent = 'Enter movements...';
+    return;
+  }
+
+  const previewLines = [
+    `${count} move${count === 1 ? '' : 's'} detected.`,
+    ...parsed.exercises.slice(0, 6).map(ex => `• ${ex.name}: ${ex.duration}s work / ${ex.rest}s rest`)
+  ];
+  if (parsed.exercises.length > 6) {
+    previewLines.push(`• ...and ${parsed.exercises.length - 6} more`);
+  }
+  parsed.warnings.slice(0, 3).forEach(warning => {
+    previewLines.push(`⚠ ${warning}`);
+  });
+
+  dom.routinePreview.innerHTML = previewLines.map(line => clean(line)).join('<br>');
 }
 
 function saveAndStartCustom() {
   const name = dom.routineName.value.trim() || 'Custom Routine';
   const text = dom.customList.value.trim();
+  const parsed = parseRoutineText(text);
 
-  if (!parse(text).length && !parseNaturalRoutine(text).length) {
+  if (!parsed.exercises.length) {
     toast('Add at least one movement.');
     return;
   }
 
-  vault[name] = text;
+  const normalised = normaliseRoutineText(parsed.exercises);
+  vault[name] = normalised;
   localStorage.setItem('tempo_vault', JSON.stringify(vault));
 
   populateVaultUI();
   closeDialog('customDialog');
-  showPreview(name, text);
+  showPreview(name, normalised);
 }
 
 function restoreDefaults() {
@@ -612,6 +857,10 @@ Object.assign(window, {
   backToSetup,
   showPreview,
   validateAndPreview,
-  parseNaturalRoutine
+  parseNaturalRoutine,
+  parseNaturalLanguageLine,
+  parseRoutineText,
+  parseCustomExercises,
+  normaliseRoutineText
 });
 document.addEventListener('DOMContentLoaded', boot);
