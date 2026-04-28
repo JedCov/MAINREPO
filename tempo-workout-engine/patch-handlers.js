@@ -26,7 +26,6 @@ document.addEventListener('click', function (event) {
     settingsBtn: function () { window.pushStateAndShow && window.pushStateAndShow('settingsDialog'); },
     previewStartBtn: function () { window.confirmStartPreview && window.confirmStartPreview(); },
     previewBackBtn: function () { window.closeOverlay && window.closeOverlay('previewDialog'); },
-    restoreDefaultsBtn: function () { window.restoreDefaults && window.restoreDefaults(); },
     closeVaultBtn: function () { window.closeOverlay && window.closeOverlay('vaultDialog'); },
     btnSaveRoutine: function () { normaliseRoutineBeforeSave(); window.saveAndStartCustom && window.saveAndStartCustom(); },
     cancelBuilderBtn: function () { window.closeOverlay && window.closeOverlay('customDialog'); },
