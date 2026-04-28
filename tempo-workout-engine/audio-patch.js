@@ -2,10 +2,12 @@
   'use strict';
 
   const STORAGE = {
+    audioProfile: 'tempoAudioProfile',
     soundVolume: 'tempoSoundVolume',
     voiceVolume: 'tempoVoiceVolume',
     voiceEnabled: 'tempoVoicePromptsEnabled',
-    voiceUri: 'tempoVoiceURI'
+    voiceUri: 'tempoVoiceURI',
+    profileTouchedSession: 'tempoAudioProfileTouchedSession'
   };
 
   let ctx = null;
@@ -29,6 +31,22 @@
     const value = Number(raw);
     if (Number.isFinite(value)) return Math.max(0, Math.min(100, value));
     return fallback;
+  }
+
+  function readStoredPositiveNumber(key, fallback) {
+    const raw = localStorage.getItem(key);
+    const value = Number(raw);
+    if (!Number.isFinite(value)) return fallback;
+    if (value <= 0) return fallback;
+    return Math.max(1, Math.min(100, value));
+  }
+
+  function markProfileTouched() {
+    try {
+      sessionStorage.setItem(STORAGE.profileTouchedSession, '1');
+    } catch (error) {
+      console.warn('Tempo profile session flag failed', error);
+    }
   }
 
   function soundVolume() {
@@ -209,7 +227,11 @@
       msg.rate = 0.82;
       msg.pitch = 1;
       msg.volume = Math.min(1, Math.max(0, voiceVolume()));
-      setTimeout(function () { window.speechSynthesis.speak(msg); }, 80);
+      if (force) {
+        window.speechSynthesis.speak(msg);
+      } else {
+        setTimeout(function () { window.speechSynthesis.speak(msg); }, 80);
+      }
     } catch (error) {
       console.warn('Tempo speech failed', error);
     }
@@ -231,19 +253,63 @@
   }
 
   function restoreAudioSettings() {
+    const profile = getEl('audioProfile');
     const sound = getEl('volumeControl');
     const voiceVol = getEl('voiceVolumeControl');
     const voiceToggle = getEl('voicePromptsToggle');
+    const profileChangedThisSession = sessionStorage.getItem(STORAGE.profileTouchedSession) === '1';
+    let recovered = false;
+
+    if (profile) {
+      const validProfiles = { full: true, voice: true, sound: true, silent: true };
+      const storedProfile = localStorage.getItem(STORAGE.audioProfile);
+      let restoredProfile = validProfiles[storedProfile] ? storedProfile : 'full';
+
+      if (restoredProfile === 'silent' && !profileChangedThisSession) {
+        restoredProfile = 'full';
+        recovered = true;
+      }
+
+      if (!validProfiles[storedProfile]) recovered = true;
+      profile.value = restoredProfile;
+      localStorage.setItem(STORAGE.audioProfile, restoredProfile);
+    }
 
     if (sound) {
-      const fallback = readStoredNumber('tempoVolume', 70);
-      sound.value = String(readStoredNumber(STORAGE.soundVolume, fallback));
+      const storedSound = localStorage.getItem(STORAGE.soundVolume);
+      const legacySound = localStorage.getItem('tempoVolume');
+      const hasStoredSound = storedSound !== null || legacySound !== null;
+      const nextSound = readStoredPositiveNumber(STORAGE.soundVolume, readStoredPositiveNumber('tempoVolume', 70));
+      if (hasStoredSound && nextSound === 70 && (Number(storedSound) <= 0 || Number(legacySound) <= 0)) {
+        recovered = true;
+      }
+      sound.value = String(nextSound);
+      localStorage.setItem(STORAGE.soundVolume, String(nextSound));
+      localStorage.setItem('tempoVolume', String(nextSound));
     }
-    if (voiceVol) voiceVol.value = String(readStoredNumber(STORAGE.voiceVolume, 85));
-    if (voiceToggle) voiceToggle.checked = localStorage.getItem(STORAGE.voiceEnabled) !== '0';
+    if (voiceVol) {
+      const storedVoiceVolume = localStorage.getItem(STORAGE.voiceVolume);
+      const nextVoiceVolume = readStoredPositiveNumber(STORAGE.voiceVolume, 85);
+      if (storedVoiceVolume !== null && Number(storedVoiceVolume) <= 0) recovered = true;
+      voiceVol.value = String(nextVoiceVolume);
+      localStorage.setItem(STORAGE.voiceVolume, String(nextVoiceVolume));
+    }
+    if (voiceToggle) {
+      const storedVoiceEnabled = localStorage.getItem(STORAGE.voiceEnabled);
+      const isValidVoiceFlag = storedVoiceEnabled === null || storedVoiceEnabled === '0' || storedVoiceEnabled === '1';
+      const nextVoiceEnabled = isValidVoiceFlag ? storedVoiceEnabled !== '0' : true;
+      voiceToggle.checked = nextVoiceEnabled;
+      localStorage.setItem(STORAGE.voiceEnabled, nextVoiceEnabled ? '1' : '0');
+      if (!isValidVoiceFlag) recovered = true;
+    }
+
+    if (recovered) {
+      showAudioToast('Audio settings recovered');
+    }
   }
 
   function previewVoice() {
+    unlockAudio();
     speak('Tempo voice preview. Stay strong and keep moving.', true);
   }
 
@@ -312,6 +378,14 @@
     if (voiceToggle) {
       voiceToggle.addEventListener('change', function () {
         localStorage.setItem(STORAGE.voiceEnabled, voiceToggle.checked ? '1' : '0');
+      });
+    }
+
+    const profileSelect = getEl('audioProfile');
+    if (profileSelect) {
+      profileSelect.addEventListener('change', function () {
+        markProfileTouched();
+        localStorage.setItem(STORAGE.audioProfile, profileSelect.value || 'full');
       });
     }
 
