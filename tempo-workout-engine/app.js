@@ -776,7 +776,7 @@ function executeConfirm() {
 }
 
 function loadSettings() {
-  dom.volumeControl.value = localStorage.getItem('tempoVolume') || 70;
+  dom.volumeControl.value = localStorage.getItem('tempoVolume') || 50;
   dom.audioProfile.value = localStorage.getItem('tempoAudioProfile') || 'full';
 }
 

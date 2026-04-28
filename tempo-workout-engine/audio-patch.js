@@ -157,20 +157,46 @@
 
     const storedUri = localStorage.getItem(STORAGE.voiceUri);
     if (storedUri) {
-      const exact = availableVoices.find(function (voice) { return voice.voiceURI === storedUri; });
-      if (exact) return exact;
+      const exactStored = availableVoices.find(function (voice) { return voice.voiceURI === storedUri; });
+      if (exactStored) return exactStored;
     }
 
-    const englishVoices = availableVoices.filter(function (voice) {
+    function isEnglish(voice) {
       return /^en([_-]|$)/i.test(String(voice.lang || ''));
-    });
+    }
 
-    const femaleHint = englishVoices.find(function (voice) {
-      return /female|samantha|victoria|karen|zira|aria|ava|google uk english female/i.test(String(voice.name || ''));
-    });
-    if (femaleHint) return femaleHint;
+    function isUkEnglish(voice) {
+      return /^en[-_]gb$/i.test(String(voice.lang || ''));
+    }
 
-    if (englishVoices.length) return englishVoices[0];
+    function isFemaleHint(voice) {
+      return /female|samantha|victoria|karen|zira|aria|ava/i.test(String(voice.name || ''));
+    }
+
+    function isNaturalEnglishHint(voice) {
+      return /google|natural|neural|wavenet|enhanced|premium|english|uk|british/i.test(String(voice.name || ''));
+    }
+
+    const exactGoogleUkFemale = availableVoices.find(function (voice) {
+      return /^google uk english female$/i.test(String(voice.name || '').trim());
+    });
+    if (exactGoogleUkFemale) return exactGoogleUkFemale;
+
+    const ukEnglishFemale = availableVoices.find(function (voice) {
+      return isUkEnglish(voice) && isFemaleHint(voice);
+    });
+    if (ukEnglishFemale) return ukEnglishFemale;
+
+    const ukEnglish = availableVoices.find(isUkEnglish);
+    if (ukEnglish) return ukEnglish;
+
+    const naturalEnglishFemale = availableVoices.find(function (voice) {
+      return isEnglish(voice) && isFemaleHint(voice) && isNaturalEnglishHint(voice);
+    });
+    if (naturalEnglishFemale) return naturalEnglishFemale;
+
+    const anyEnglish = availableVoices.find(isEnglish);
+    if (anyEnglish) return anyEnglish;
 
     const browserDefault = availableVoices.find(function (voice) { return voice.default; });
     return browserDefault || availableVoices[0];
