@@ -79,7 +79,7 @@
     return ctx;
   }
 
-  function beep(freq, dur, level) {
+  function beep(freq, dur, level, waveform, startAt) {
     const context = ensureContext();
     if (!context) return;
 
@@ -87,11 +87,11 @@
       context.resume().catch(function () {});
     }
 
-    const now = context.currentTime + 0.01;
+    const now = typeof startAt === 'number' ? startAt : context.currentTime + 0.01;
     const gain = context.createGain();
     const osc = context.createOscillator();
 
-    osc.type = 'sine';
+    osc.type = waveform || 'sine';
     osc.frequency.setValueAtTime(freq, now);
     gain.gain.setValueAtTime(0.0001, now);
     gain.gain.exponentialRampToValueAtTime(level * soundVolume(), now + 0.025);
@@ -101,6 +101,13 @@
     gain.connect(context.destination);
     osc.start(now);
     osc.stop(now + dur + 0.05);
+  }
+
+  function vibrate(ms) {
+    try {
+      if (!navigator || typeof navigator.vibrate !== 'function') return;
+      navigator.vibrate(ms);
+    } catch (error) {}
   }
 
   function unlockAudio() {
@@ -113,7 +120,7 @@
       }
 
       if (!unlocked && audioProfile() !== 'voice' && audioProfile() !== 'silent') {
-        beep(660, 0.18, 0.16);
+        playCue('unlock');
       }
 
       if (!unlocked) {
@@ -125,31 +132,125 @@
     }
   }
 
-  function tone(type) {
+  function playPattern(pattern) {
+    const context = ensureContext();
+    if (!context || !Array.isArray(pattern) || !pattern.length) return;
+
+    if (context.state === 'suspended') {
+      context.resume().catch(function () {});
+    }
+
+    const anchor = context.currentTime + 0.01;
+    pattern.forEach(function (note) {
+      beep(note.freq, note.dur, note.level, note.wave, anchor + (note.at || 0));
+    });
+  }
+
+  function playCue(type) {
     const profile = audioProfile();
     if (profile === 'voice' || profile === 'silent') return;
 
-    if (type === 'complete') {
-      beep(523, 0.22, 0.18);
-      setTimeout(function () { beep(659, 0.22, 0.18); }, 140);
-      setTimeout(function () { beep(783, 0.28, 0.2); }, 280);
+    if (type === 'ready') {
+      playPattern([
+        { freq: 392, dur: 0.12, level: 0.11, wave: 'sine', at: 0 },
+        { freq: 440, dur: 0.14, level: 0.12, wave: 'sine', at: 0.14 }
+      ]);
       return;
     }
 
-    if (type === 'rest') {
-      beep(392, 0.22, 0.16);
-      setTimeout(function () { beep(329, 0.22, 0.16); }, 140);
+    if (type === 'phaseStart') {
+      playPattern([
+        { freq: 523, dur: 0.16, level: 0.16, wave: 'triangle', at: 0 },
+        { freq: 659, dur: 0.16, level: 0.18, wave: 'triangle', at: 0.11 },
+        { freq: 784, dur: 0.2, level: 0.2, wave: 'triangle', at: 0.22 }
+      ]);
+      vibrate(18);
+      return;
+    }
+
+    if (type === 'restStart') {
+      playPattern([
+        { freq: 440, dur: 0.17, level: 0.13, wave: 'sine', at: 0 },
+        { freq: 370, dur: 0.18, level: 0.13, wave: 'sine', at: 0.12 },
+        { freq: 330, dur: 0.2, level: 0.12, wave: 'sine', at: 0.24 }
+      ]);
+      vibrate(16);
       return;
     }
 
     if (type === 'countdown') {
-      beep(880, 0.16, 0.2);
+      playPattern([
+        { freq: 980, dur: 0.08, level: 0.17, wave: 'square', at: 0 }
+      ]);
+      vibrate(12);
       return;
     }
 
-    beep(523, 0.18, 0.16);
-    setTimeout(function () { beep(659, 0.18, 0.16); }, 120);
-    setTimeout(function () { beep(783, 0.22, 0.18); }, 240);
+    if (type === 'success') {
+      playPattern([
+        { freq: 523, dur: 0.14, level: 0.16, wave: 'triangle', at: 0 },
+        { freq: 659, dur: 0.14, level: 0.16, wave: 'triangle', at: 0.1 },
+        { freq: 784, dur: 0.16, level: 0.18, wave: 'triangle', at: 0.2 },
+        { freq: 1046, dur: 0.24, level: 0.18, wave: 'sine', at: 0.32 }
+      ]);
+      return;
+    }
+
+    if (type === 'pause') {
+      playPattern([
+        { freq: 430, dur: 0.12, level: 0.12, wave: 'triangle', at: 0 }
+      ]);
+      vibrate(14);
+      return;
+    }
+
+    if (type === 'resume') {
+      playPattern([
+        { freq: 440, dur: 0.09, level: 0.12, wave: 'triangle', at: 0 },
+        { freq: 554, dur: 0.12, level: 0.13, wave: 'triangle', at: 0.08 }
+      ]);
+      vibrate(14);
+      return;
+    }
+
+    if (type === 'skip') {
+      playPattern([
+        { freq: 620, dur: 0.08, level: 0.13, wave: 'square', at: 0 },
+        { freq: 820, dur: 0.08, level: 0.14, wave: 'square', at: 0.07 }
+      ]);
+      vibrate(10);
+      return;
+    }
+
+    if (type === 'confirm') {
+      playPattern([
+        { freq: 220, dur: 0.16, level: 0.13, wave: 'triangle', at: 0 },
+        { freq: 185, dur: 0.2, level: 0.12, wave: 'triangle', at: 0.14 }
+      ]);
+      return;
+    }
+
+    if (type === 'save') {
+      playPattern([
+        { freq: 660, dur: 0.11, level: 0.11, wave: 'sine', at: 0 },
+        { freq: 784, dur: 0.14, level: 0.11, wave: 'sine', at: 0.1 }
+      ]);
+      return;
+    }
+
+    if (type === 'warning') {
+      playPattern([
+        { freq: 392, dur: 0.11, level: 0.12, wave: 'square', at: 0 },
+        { freq: 350, dur: 0.11, level: 0.12, wave: 'square', at: 0.14 }
+      ]);
+      return;
+    }
+
+    if (type === 'unlock') {
+      playPattern([
+        { freq: 660, dur: 0.18, level: 0.16, wave: 'sine', at: 0 }
+      ]);
+    }
   }
 
   function chooseBestVoice(availableVoices) {
@@ -352,16 +453,16 @@
       lastSecond = null;
 
       if (title === 'PREPARE') {
-        tone('work');
+        playCue('ready');
         speak('Ready to move.');
       } else if (title === 'REST') {
-        tone('rest');
+        playCue('restStart');
         speak('Rest.');
       } else if (title === 'Done') {
-        tone('complete');
+        playCue('success');
         speak('Workout complete. Outstanding.');
       } else {
-        tone('work');
+        playCue('phaseStart');
         speak(title.toLowerCase());
       }
     }
@@ -370,7 +471,7 @@
       const value = Number(timer.textContent.trim());
       if (value > 0 && value <= 3 && value !== lastSecond) {
         lastSecond = value;
-        tone('countdown');
+        playCue('countdown');
       }
     }
   }
@@ -432,6 +533,11 @@
 
     const view = getEl('workoutView');
     if (!view) return;
+
+    window.playTempoCue = function (cue) {
+      unlockAudio();
+      playCue(cue);
+    };
 
     const observer = new MutationObserver(checkWorkoutScreen);
     observer.observe(view, { childList: true, subtree: true, characterData: true });
