@@ -51,12 +51,12 @@
 
   function soundVolume() {
     const el = getEl('volumeControl');
-    return el ? Number(el.value || 70) / 100 : 0.7;
+    return el ? Number(el.value || 50) / 100 : 0.5;
   }
 
   function voiceVolume() {
     const el = getEl('voiceVolumeControl');
-    return el ? Number(el.value || 85) / 100 : 0.85;
+    return el ? Number(el.value || 50) / 100 : 0.5;
   }
 
   function voicePromptsEnabled() {
@@ -224,7 +224,7 @@
       const msg = new SpeechSynthesisUtterance(text);
       const voice = selectedVoice();
       if (voice) msg.voice = voice;
-      msg.rate = 0.82;
+      msg.rate = 0.75;
       msg.pitch = 1;
       msg.volume = Math.min(1, Math.max(0, voiceVolume()));
       if (force) {
@@ -279,8 +279,8 @@
       const storedSound = localStorage.getItem(STORAGE.soundVolume);
       const legacySound = localStorage.getItem('tempoVolume');
       const hasStoredSound = storedSound !== null || legacySound !== null;
-      const nextSound = readStoredPositiveNumber(STORAGE.soundVolume, readStoredPositiveNumber('tempoVolume', 70));
-      if (hasStoredSound && nextSound === 70 && (Number(storedSound) <= 0 || Number(legacySound) <= 0)) {
+      const nextSound = readStoredPositiveNumber(STORAGE.soundVolume, readStoredPositiveNumber('tempoVolume', 50));
+      if (hasStoredSound && nextSound === 50 && (Number(storedSound) <= 0 || Number(legacySound) <= 0)) {
         recovered = true;
       }
       sound.value = String(nextSound);
@@ -289,7 +289,7 @@
     }
     if (voiceVol) {
       const storedVoiceVolume = localStorage.getItem(STORAGE.voiceVolume);
-      const nextVoiceVolume = readStoredPositiveNumber(STORAGE.voiceVolume, 85);
+      const nextVoiceVolume = readStoredPositiveNumber(STORAGE.voiceVolume, 50);
       if (storedVoiceVolume !== null && Number(storedVoiceVolume) <= 0) recovered = true;
       voiceVol.value = String(nextVoiceVolume);
       localStorage.setItem(STORAGE.voiceVolume, String(nextVoiceVolume));
