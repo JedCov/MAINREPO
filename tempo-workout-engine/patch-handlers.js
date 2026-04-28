@@ -1,16 +1,15 @@
 function normaliseRoutineBeforeSave() {
   const listEl = document.getElementById('customList');
-  if (!listEl || !window.parseNaturalRoutine) return;
+  if (!listEl || !window.parseRoutineText || !window.normaliseRoutineText) return;
 
   const raw = String(listEl.value || '').trim();
-  if (!raw || raw.indexOf(',') !== -1) return;
+  if (!raw) return;
 
-  const exercises = window.parseNaturalRoutine(raw);
+  const parsed = window.parseRoutineText(raw);
+  const exercises = parsed && Array.isArray(parsed.exercises) ? parsed.exercises : [];
   if (!Array.isArray(exercises) || exercises.length === 0) return;
 
-  listEl.value = exercises.map(function (exercise) {
-    return exercise.name + ', ' + exercise.duration + ', ' + exercise.rest;
-  }).join('\n');
+  listEl.value = window.normaliseRoutineText(exercises);
 
   listEl.dispatchEvent(new Event('input', { bubbles: true }));
 }
