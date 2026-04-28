@@ -195,6 +195,11 @@
     });
     if (naturalEnglishFemale) return naturalEnglishFemale;
 
+    const anyEnglishFemale = availableVoices.find(function (voice) {
+      return isEnglish(voice) && isFemaleHint(voice);
+    });
+    if (anyEnglishFemale) return anyEnglishFemale;
+
     const anyEnglish = availableVoices.find(isEnglish);
     if (anyEnglish) return anyEnglish;
 
