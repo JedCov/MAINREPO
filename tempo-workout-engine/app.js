@@ -4,21 +4,22 @@ const $ = id => document.getElementById(id);
 const dom = {};
 
 const MAIN_DEFAULT_NAME = '4-Minute Core Workout';
-const MAIN_DEFAULT_TEXT = 'Abdominal Crunch Hold, 30, 10\nHundreds, 30, 10\nRoll-Like-A-Ball, 30, 10\nAbdominal Leg Raises, 30, 10\nLeg-To-Chest Raises, 30, 10\nCobra Pose, 30, 10\nPlank, 30, 0';
+const MAIN_DEFAULT_TEXT = 'Abdominal Crunches, 30, 10\nHundreds, 30, 10\nRoll-Like-A-Ball, 30, 10\nAbdominal Leg Raises, 30, 10\nLeg-To-Chest Raises, 30, 10\nCobra Pose, 30, 10\nPlank, 30, 0';
 
 const defaults = {
-  [MAIN_DEFAULT_NAME]: MAIN_DEFAULT_TEXT,
-  'Legacy: Monday Dumbbell Split': 'Dumbbell Curls, 30, 10\nOverhead Tricep Extension, 30, 10\nHammer Curls, 30, 10\nClose-Grip Incline Pushups, 30, 10\nTricep Kickbacks, 30, 10\nChair Dips, 30, 0',
-  'Legacy: Wednesday Dumbbell Split': 'Arnold Press, 30, 10\nOne-Arm Bench Row, 30, 10\nLateral Raises, 30, 10\nRear-Delt Fly, 30, 10\nFront Raises, 30, 10\nUpright Row With Broomstick, 30, 0',
-  'Legacy: Friday Dumbbell Split': 'Goblet Squats, 30, 10\nFeet-Elevated Pushups, 30, 10\nSplit Squats, 30, 10\nSlow-Tempo Pushups, 30, 10\nRomanian Deadlift, 30, 10\nWide-Grip Pushups, 30, 0'
+  [MAIN_DEFAULT_NAME]: MAIN_DEFAULT_TEXT
 };
 const LEGACY_ROUTINE_NAMES = new Set([
   'Legacy: Monday Dumbbell Split',
   'Legacy: Wednesday Dumbbell Split',
   'Legacy: Friday Dumbbell Split',
+  'Monday Dumbbell Split',
+  'Wednesday Dumbbell Split',
+  'Friday Dumbbell Split',
   'Monday: Biceps & Triceps',
   'Wednesday: Shoulders & Back',
-  'Friday: Legs & Chest'
+  'Friday: Legs & Chest',
+  'Strength Intro'
 ]);
 
 let vault = {};
@@ -141,7 +142,7 @@ function loadVaultData() {
     }
   });
 
-  vault = { ...storedVault };
+  vault = { ...defaults, ...storedVault };
   vault[MAIN_DEFAULT_NAME] = MAIN_DEFAULT_TEXT;
   localStorage.setItem('tempo_vault', JSON.stringify(vault));
   populateVaultUI();
@@ -467,12 +468,32 @@ function executeConfirm() {
 }
 
 function loadSettings() {
-  dom.volumeControl.value = localStorage.getItem('tempoVolume') || 70;
+  const legacyVolume = localStorage.getItem('tempoVolume');
+  const soundVolume = localStorage.getItem('tempoSoundVolume') || legacyVolume || 70;
+  const voiceVolume = localStorage.getItem('tempoVoiceVolume') || 80;
+  const voicePromptsEnabled = localStorage.getItem('tempoVoicePromptsEnabled');
+
+  dom.volumeControl.value = soundVolume;
+  dom.voiceVolumeControl.value = voiceVolume;
+  dom.voicePromptsToggle.checked = voicePromptsEnabled === null ? true : voicePromptsEnabled === 'true';
   dom.audioProfile.value = localStorage.getItem('tempoAudioProfile') || 'full';
 }
 
 function saveSettings() {
   localStorage.setItem('tempoVolume', dom.volumeControl.value);
+  localStorage.setItem('tempoSoundVolume', dom.volumeControl.value);
+  localStorage.setItem('tempoVoiceVolume', dom.voiceVolumeControl.value);
+  localStorage.setItem('tempoVoicePromptsEnabled', String(dom.voicePromptsToggle.checked));
+  if (dom.voiceSelect.value) {
+    localStorage.setItem('tempoVoiceURI', dom.voiceSelect.value);
+    const selectedOption = dom.voiceSelect.options[dom.voiceSelect.selectedIndex];
+    if (selectedOption) {
+      localStorage.setItem('tempoVoiceName', selectedOption.textContent || '');
+    }
+  } else {
+    localStorage.removeItem('tempoVoiceURI');
+    localStorage.removeItem('tempoVoiceName');
+  }
   localStorage.setItem('tempoAudioProfile', dom.audioProfile.value);
   closeDialog('settingsDialog');
   toast('Settings saved');
@@ -499,6 +520,10 @@ function boot() {
     'settingsDialog',
     'resumeCard',
     'volumeControl',
+    'voicePromptsToggle',
+    'voiceVolumeControl',
+    'voiceSelect',
+    'previewVoiceBtn',
     'customList',
     'routineName',
     'toast',

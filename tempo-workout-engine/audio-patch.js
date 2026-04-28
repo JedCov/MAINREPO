@@ -6,15 +6,31 @@
   let lastTitle = '';
   let lastSecond = null;
   let lastSpoken = '';
+  let voices = [];
+  let selectedVoiceURI = '';
+  let selectedVoiceName = '';
+  let voiceSelectEl = null;
 
   function audioProfile() {
     const el = document.getElementById('audioProfile');
     return el ? el.value : 'full';
   }
 
-  function volume() {
+  function soundVolume() {
     const el = document.getElementById('volumeControl');
-    return el ? Number(el.value || 70) / 100 : 0.7;
+    return el ? Number(el.value || 70) / 100 : Number(localStorage.getItem('tempoSoundVolume') || localStorage.getItem('tempoVolume') || 70) / 100;
+  }
+
+  function voiceVolume() {
+    const el = document.getElementById('voiceVolumeControl');
+    return el ? Number(el.value || 80) / 100 : Number(localStorage.getItem('tempoVoiceVolume') || 80) / 100;
+  }
+
+  function voicePromptsEnabled() {
+    const el = document.getElementById('voicePromptsToggle');
+    if (el) return !!el.checked;
+    const saved = localStorage.getItem('tempoVoicePromptsEnabled');
+    return saved === null ? true : saved === 'true';
   }
 
   function showAudioToast(message) {
@@ -47,7 +63,7 @@
     osc.type = 'sine';
     osc.frequency.setValueAtTime(freq, now);
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(level * volume(), now + 0.025);
+    gain.gain.exponentialRampToValueAtTime(level * soundVolume(), now + 0.025);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
 
     osc.connect(gain);
@@ -110,6 +126,7 @@
     const profile = audioProfile();
     if (profile === 'sound' || profile === 'silent') return;
     if (!('speechSynthesis' in window)) return;
+    if (!voicePromptsEnabled()) return;
     if (!text || text === lastSpoken) return;
 
     lastSpoken = text;
@@ -119,11 +136,130 @@
       const msg = new SpeechSynthesisUtterance(text);
       msg.rate = 0.82;
       msg.pitch = 1;
-      msg.volume = Math.min(1, Math.max(0.2, volume()));
+      msg.volume = Math.min(1, Math.max(0.05, voiceVolume()));
+
+      const voice = resolveVoice();
+      if (voice) {
+        msg.voice = voice;
+      }
       setTimeout(function () { window.speechSynthesis.speak(msg); }, 80);
     } catch (error) {
       console.warn('Tempo speech failed', error);
     }
+  }
+
+  function normalise(str) {
+    return String(str || '').toLowerCase();
+  }
+
+  function scoreVoice(voice) {
+    const name = normalise(voice.name);
+    const lang = normalise(voice.lang);
+    let score = 0;
+
+    if (lang.indexOf('en') === 0 || lang.indexOf('-en') !== -1 || lang.indexOf('english') !== -1) score += 45;
+    if (voice.default) score += 3;
+
+    const preferredNames = [
+      'samantha', 'victoria', 'karen', 'serena', 'moira', 'tessa',
+      'google uk english female', 'google us english',
+      'microsoft sonia', 'microsoft libby', 'microsoft aria', 'microsoft jenny', 'microsoft zira'
+    ];
+    preferredNames.forEach(function (token) {
+      if (name.indexOf(token) !== -1) score += 25;
+    });
+
+    if (name.indexOf('female') !== -1 || name.indexOf('woman') !== -1 || name.indexOf('natural') !== -1 || name.indexOf('neural') !== -1) {
+      score += 18;
+    }
+
+    const penalties = ['david', 'male', 'espeak', 'compact', 'default', 'robot'];
+    penalties.forEach(function (token) {
+      if (name.indexOf(token) !== -1) score -= 14;
+    });
+
+    if (name.indexOf('google') !== -1 || name.indexOf('microsoft') !== -1 || name.indexOf('apple') !== -1) {
+      score += 4;
+    }
+
+    return score;
+  }
+
+  function bestVoice(list, requireEnglish) {
+    const pool = requireEnglish
+      ? list.filter(function (voice) {
+        const lang = normalise(voice.lang);
+        return lang.indexOf('en') === 0 || lang.indexOf('-en') !== -1 || lang.indexOf('english') !== -1;
+      })
+      : list.slice();
+
+    if (!pool.length) return null;
+
+    return pool
+      .slice()
+      .sort(function (a, b) { return scoreVoice(b) - scoreVoice(a); })[0];
+  }
+
+  function resolveVoice() {
+    if (!voices.length) return null;
+
+    if (selectedVoiceURI) {
+      const byURI = voices.find(function (voice) { return voice.voiceURI === selectedVoiceURI; });
+      if (byURI) return byURI;
+    }
+
+    if (selectedVoiceName) {
+      const byName = voices.find(function (voice) { return voice.name === selectedVoiceName; });
+      if (byName) return byName;
+    }
+
+    return bestVoice(voices, true) || bestVoice(voices, false) || null;
+  }
+
+  function onVoiceSelectionChange() {
+    if (!voiceSelectEl) return;
+    const value = voiceSelectEl.value;
+    selectedVoiceURI = value || '';
+    const selectedVoice = voices.find(function (voice) { return voice.voiceURI === value; });
+    selectedVoiceName = selectedVoice ? selectedVoice.name : '';
+
+    if (selectedVoiceURI) {
+      localStorage.setItem('tempoVoiceURI', selectedVoiceURI);
+      localStorage.setItem('tempoVoiceName', selectedVoiceName);
+    } else {
+      localStorage.removeItem('tempoVoiceURI');
+      localStorage.removeItem('tempoVoiceName');
+    }
+  }
+
+  function renderVoiceOptions() {
+    if (!voiceSelectEl) return;
+
+    if (!voices.length) {
+      voiceSelectEl.innerHTML = '<option value="">No voices available</option>';
+      return;
+    }
+
+    const preferred = resolveVoice();
+    const initialURI = selectedVoiceURI || (preferred ? preferred.voiceURI : '');
+    voiceSelectEl.innerHTML = voices.map(function (voice) {
+      const label = voice.name + ' (' + voice.lang + ')';
+      const selected = voice.voiceURI === initialURI ? ' selected' : '';
+      return '<option value="' + voice.voiceURI + '"' + selected + '>' + label + '</option>';
+    }).join('');
+
+    voiceSelectEl.value = initialURI;
+    onVoiceSelectionChange();
+  }
+
+  function loadVoices() {
+    if (!('speechSynthesis' in window)) return;
+    voices = window.speechSynthesis.getVoices() || [];
+    renderVoiceOptions();
+  }
+
+  function previewVoice() {
+    speak('This is the selected Tempo coach voice.');
   }
 
   function checkWorkoutScreen() {
@@ -131,8 +267,10 @@
     if (!view) return;
 
     const heading = view.querySelector('h1');
+    const detail = view.querySelector('p.text-muted');
     const timer = document.getElementById('mainTimer');
     const title = heading ? heading.textContent.trim() : '';
+    const detailText = detail ? detail.textContent.trim() : '';
 
     if (title && title !== lastTitle) {
       lastTitle = title;
@@ -140,10 +278,14 @@
 
       if (title === 'PREPARE') {
         tone('work');
-        speak('Ready to move.');
+        speak('Get ready. Ready to move.');
       } else if (title === 'REST') {
         tone('rest');
-        speak('Rest.');
+        if (detailText.indexOf('Next:') === 0) {
+          speak('Rest. Up next, ' + detailText.replace(/^Next:\s*/i, '') + '.');
+        } else {
+          speak('Rest.');
+        }
       } else if (title === 'Done') {
         tone('complete');
         speak('Workout complete. Outstanding.');
@@ -167,6 +309,35 @@
   document.addEventListener('touchstart', unlockAudio, { capture: true, passive: true });
 
   document.addEventListener('DOMContentLoaded', function () {
+    const legacyVolume = localStorage.getItem('tempoVolume');
+    if (!localStorage.getItem('tempoSoundVolume') && legacyVolume !== null) {
+      localStorage.setItem('tempoSoundVolume', legacyVolume);
+    }
+    if (!localStorage.getItem('tempoVoiceVolume') && legacyVolume !== null) {
+      localStorage.setItem('tempoVoiceVolume', legacyVolume);
+    }
+
+    selectedVoiceURI = localStorage.getItem('tempoVoiceURI') || '';
+    selectedVoiceName = localStorage.getItem('tempoVoiceName') || '';
+    voiceSelectEl = document.getElementById('voiceSelect');
+    if (voiceSelectEl) {
+      voiceSelectEl.addEventListener('change', onVoiceSelectionChange);
+    }
+
+    const previewBtn = document.getElementById('previewVoiceBtn');
+    if (previewBtn) {
+      previewBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        unlockAudio();
+        previewVoice();
+      });
+    }
+
+    loadVoices();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
     const view = document.getElementById('workoutView');
     if (!view) return;
 

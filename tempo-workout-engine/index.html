@@ -7,12 +7,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Tempo" />
-  <title>Tempo v5.8.17</title>
+  <title>Tempo v5.8.19</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=5.8.17" />
+  <link rel="stylesheet" href="styles.css?v=5.8.19" />
 </head>
 <body id="body">
   <div id="ariaAnnouncer" class="sr-only" aria-live="assertive"></div>
@@ -36,12 +36,12 @@
     <dialog id="previewDialog" class="overlay-panel text-center"><h2 id="previewTitle" class="text-high m-0">Preview</h2><div class="infoGrid mb-md"><div class="black-box"><b id="previewMovements">0</b><span>Moves</span></div><div class="black-box"><b id="previewTime">0m</b><span>Time</span></div></div><div id="previewList" class="black-box text-left text-muted mb-md preview-list"></div><div class="flex flex-row gap-sm mt-md"><button id="previewStartBtn" class="primary flex-2" type="button">Start Session</button><button id="previewBackBtn" class="secondary flex-1" type="button">Back</button></div></dialog>
     <dialog id="vaultDialog" class="overlay-panel"><h2>My Routines</h2><div id="vaultList" class="mb-md"></div><button id="closeVaultBtn" class="secondary w-full" type="button">Close Library</button></dialog>
     <dialog id="customDialog" class="overlay-panel"><h2>Create Routine</h2><input type="text" id="routineName" placeholder="Routine Name" class="mb-sm form-control" /><textarea id="customList" class="routine-editor" placeholder="e.g. Plank, 30, 10"></textarea><div id="routinePreview" class="black-box mt-sm mb-md text-muted small-text">Enter movements...</div><div class="flex flex-row gap-sm"><button id="btnSaveRoutine" class="primary flex-2" type="button" disabled>Save & Preview</button><button id="cancelBuilderBtn" class="secondary flex-1" type="button">Cancel</button></div></dialog>
-    <dialog id="settingsDialog" class="overlay-panel"><h2>Settings</h2><div class="black-box mb-md"><label class="font-bold text-muted block mb-xs" for="audioProfile">Audio Profile</label><select id="audioProfile" class="mb-md form-control"><option value="full">Full (Voice + Chimes)</option><option value="voice">Voice Only</option><option value="sound">Sound Only</option><option value="silent">Silent</option></select><label class="font-bold text-muted block mb-xs" for="volumeControl">Volume</label><input id="volumeControl" type="range" min="0" max="100" value="70" class="w-full mb-md" /></div><button id="saveSettingsBtn" class="primary w-full" type="button">Save & Close</button></dialog>
+    <dialog id="settingsDialog" class="overlay-panel"><h2>Settings</h2><div class="black-box mb-md"><label class="font-bold text-muted block mb-xs" for="audioProfile">Audio Profile</label><select id="audioProfile" class="mb-md form-control"><option value="full">Full (Voice + Chimes)</option><option value="voice">Voice Only</option><option value="sound">Sound Only</option><option value="silent">Silent</option></select><label class="font-bold text-muted block mb-xs" for="volumeControl">Sound Volume</label><input id="volumeControl" type="range" min="0" max="100" value="70" class="w-full mb-md" /><div class="font-bold text-muted block mb-xs">Voice</div><label class="flex flex-row gap-sm mb-sm" for="voicePromptsToggle"><input id="voicePromptsToggle" type="checkbox" checked /><span class="text-muted">Voice Prompts</span></label><label class="font-bold text-muted block mb-xs" for="voiceVolumeControl">Voice Volume</label><input id="voiceVolumeControl" type="range" min="0" max="100" value="80" class="w-full mb-md" /><label class="font-bold text-muted block mb-xs" for="voiceSelect">Coach Voice</label><select id="voiceSelect" class="mb-sm form-control"><option value="">Loading voices…</option></select><button id="previewVoiceBtn" class="secondary w-full" type="button">Preview Voice</button></div><button id="saveSettingsBtn" class="primary w-full" type="button">Save & Close</button></dialog>
     <dialog id="confirmDialog" class="overlay-panel text-center"><h2 class="text-danger">Exit Session?</h2><p id="confirmText" class="text-muted mb-lg">Progress will not be saved.</p><div class="flex flex-row gap-sm"><button id="confirmYesBtn" class="danger flex-1" type="button">Yes, End</button><button id="confirmCancelBtn" class="secondary flex-1" type="button">Cancel</button></div></dialog>
   </main>
 
-  <script src="app.js?v=5.8.17" defer></script>
-  <script src="patch-handlers.js?v=5.8.17" defer></script>
-  <script src="audio-patch.js?v=5.8.17" defer></script>
+  <script src="app.js?v=5.8.19" defer></script>
+  <script src="patch-handlers.js?v=5.8.19" defer></script>
+  <script src="audio-patch.js?v=5.8.19" defer></script>
 </body>
 </html>
