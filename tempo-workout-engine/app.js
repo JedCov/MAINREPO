@@ -36,6 +36,13 @@ let selected = null;
 let confirmAction = null;
 let wakeLockSentinel = null;
 const activeOverlays = new Set();
+let lastPreviewValid = true;
+
+function playCue(name) {
+  if (typeof window.playTempoCue === 'function') {
+    window.playTempoCue(name);
+  }
+}
 
 function isWorkoutActive() {
   return mode === 'ready' || mode === 'exercise' || mode === 'rest';
@@ -432,6 +439,7 @@ function showPreview(name, text) {
 
   if (!exercises.length) {
     toast('Invalid routine format.');
+    playCue('warning');
     return;
   }
 
@@ -629,12 +637,14 @@ function togglePause() {
   if (mode === 'setup' || mode === 'complete') return;
 
   paused = !paused;
+  playCue(paused ? 'pause' : 'resume');
   lastTick = Date.now();
   render();
 }
 
 function skip() {
   if (mode !== 'setup' && mode !== 'complete') {
+    playCue('skip');
     nextScreen();
   }
 }
@@ -714,12 +724,18 @@ function openBuilder() {
 function validateAndPreview() {
   const parsed = parseRoutineText(dom.customList.value);
   const count = parsed.exercises.length;
+  const hasInput = dom.customList.value.trim().length > 0;
   dom.btnSaveRoutine.disabled = count === 0;
 
   if (!count) {
+    if (hasInput && lastPreviewValid) {
+      playCue('warning');
+    }
+    lastPreviewValid = false;
     dom.routinePreview.textContent = 'Enter movements...';
     return;
   }
+  lastPreviewValid = true;
 
   const previewLines = [
     `${count} move${count === 1 ? '' : 's'} detected.`,
@@ -742,6 +758,7 @@ function saveAndStartCustom() {
 
   if (!parsed.exercises.length) {
     toast('Add at least one movement.');
+    playCue('warning');
     return;
   }
 
@@ -762,6 +779,7 @@ function restoreDefaults() {
 
 function confirmEndSession() {
   confirmAction = () => {
+    playCue('confirm');
     closeDialog('confirmDialog');
     backToSetup();
   };
@@ -783,6 +801,7 @@ function loadSettings() {
 function saveSettings() {
   localStorage.setItem('tempoVolume', dom.volumeControl.value);
   localStorage.setItem('tempoAudioProfile', dom.audioProfile.value);
+  playCue('save');
   closeDialog('settingsDialog');
   toast('Settings saved');
 }
