@@ -4,14 +4,23 @@ const $ = id => document.getElementById(id);
 const dom = {};
 
 const MAIN_DEFAULT_NAME = '4-Minute Core Workout';
-const MAIN_DEFAULT_TEXT = 'Abdominal Crunch Hold, 30, 10\nHundreds, 30, 10\nRoll-Like-A-Ball, 30, 10\nAbdominal Leg Raises, 30, 10\nLeg-To-Chest Raises, 30, 10\nCobra Pose, 30, 10\nPlank, 30, 0';
+const MAIN_DEFAULT_TEXT = 'Abdominal Crunches, 30, 10\nHundreds, 30, 10\nRoll-Like-A-Ball, 30, 10\nAbdominal Leg Raises, 30, 10\nLeg-To-Chest Raises, 30, 10\nCobra Pose, 30, 10\nPlank, 30, 0';
 
 const defaults = {
-  [MAIN_DEFAULT_NAME]: MAIN_DEFAULT_TEXT,
-  'Legacy: Monday Dumbbell Split': 'Dumbbell Curls, 30, 10\nOverhead Tricep Extension, 30, 10\nHammer Curls, 30, 10\nClose-Grip Incline Pushups, 30, 10\nTricep Kickbacks, 30, 10\nChair Dips, 30, 0',
-  'Legacy: Wednesday Dumbbell Split': 'Arnold Press, 30, 10\nOne-Arm Bench Row, 30, 10\nLateral Raises, 30, 10\nRear-Delt Fly, 30, 10\nFront Raises, 30, 10\nUpright Row With Broomstick, 30, 0',
-  'Legacy: Friday Dumbbell Split': 'Goblet Squats, 30, 10\nFeet-Elevated Pushups, 30, 10\nSplit Squats, 30, 10\nSlow-Tempo Pushups, 30, 10\nRomanian Deadlift, 30, 10\nWide-Grip Pushups, 30, 0'
+  [MAIN_DEFAULT_NAME]: MAIN_DEFAULT_TEXT
 };
+const LEGACY_ROUTINE_NAMES = new Set([
+  'Legacy: Monday Dumbbell Split',
+  'Legacy: Wednesday Dumbbell Split',
+  'Legacy: Friday Dumbbell Split',
+  'Monday Dumbbell Split',
+  'Wednesday Dumbbell Split',
+  'Friday Dumbbell Split',
+  'Monday: Biceps & Triceps',
+  'Wednesday: Shoulders & Back',
+  'Friday: Legs & Chest',
+  'Strength Intro'
+]);
 
 let vault = {};
 let routine = null;
@@ -25,6 +34,9 @@ let startedAt = 0;
 let lastTick = null;
 let selected = null;
 let confirmAction = null;
+let wakeLockSentinel = null;
+let closingFromPopstate = false;
+let suppressPopstateClose = false;
 
 function clean(text) {
   return String(text).replace(/[&<>"']/g, char => ({
@@ -106,6 +118,162 @@ function parseNaturalRoutine(text) {
   return exercises;
 }
 
+function clampDuration(value, fallback) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.max(1, Math.min(600, parsed));
+}
+
+function clampRest(value, fallback) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return Math.max(0, Math.min(600, parsed));
+}
+
+function parseNaturalLanguageLine(line) {
+  const raw = String(line || '').trim();
+  if (!raw) return { exercises: [], warnings: [] };
+
+  const warnings = [];
+  const roundsMatch = raw.match(/^(\d+)\s*(?:rounds?|sets?)\s*:\s*(.+)$/i);
+  if (roundsMatch) {
+    const rounds = Math.max(1, clampDuration(roundsMatch[1], 1));
+    const block = roundsMatch[2];
+    const pieces = block.split(/\s*,\s*/).map(piece => piece.trim()).filter(Boolean);
+    const parsedPieces = pieces.flatMap(piece => parseNaturalLanguageLine(piece).exercises);
+    const exercises = [];
+
+    for (let round = 1; round <= rounds; round += 1) {
+      parsedPieces.forEach(piece => {
+        exercises.push({
+          name: `Round ${round}: ${piece.name}`,
+          duration: piece.duration,
+          rest: piece.rest,
+          note: piece.note || ''
+        });
+      });
+    }
+
+    warnings.push(`Interpreted as ${rounds} rounds.`);
+    return { exercises, warnings };
+  }
+
+  const repPattern = /([a-z][a-z\s-]*?)\s+(\d+)\s*x\s*(\d+)/ig;
+  const repMatches = Array.from(raw.replace(/^superset\s*/i, '').matchAll(repPattern));
+  if (repMatches.length) {
+    return {
+      exercises: repMatches.map(match => ({
+        name: titleCase(match[1].trim()),
+        duration: 30,
+        rest: null,
+        note: `${match[2]}x${match[3]} reps`
+      })),
+      warnings: ['Rep-based input converted to 30s work intervals.']
+    };
+  }
+
+  const patterns = [
+    /^(.+?)\s*(?:for\s*)?(\d+)\s*(?:s|sec|secs|second|seconds)\b(?:[,\s;:-]*(?:rest|break)\s*(\d+)\s*(?:s|sec|secs|second|seconds)?)?$/i,
+    /^(\d+)\s*(?:s|sec|secs|second|seconds)\s+(.+?)(?:[,\s;:-]*(\d+)\s*(?:s|sec|secs|second|seconds)\s*(?:rest|break))?$/i,
+    /^(.+?)\s+(\d+)\s*s(?:ec(?:onds?)?)?\b(?:\s*(?:rest|break)\s*(\d+)\s*s(?:ec(?:onds?)?)?)?$/i,
+    /^(.+?)(?:\s*(?:rest|break)\s*(\d+)\s*s(?:ec(?:onds?)?)?)?$/i
+  ];
+
+  for (let i = 0; i < patterns.length; i += 1) {
+    const match = raw.match(patterns[i]);
+    if (!match) continue;
+
+    let name = '';
+    let duration = 30;
+    let rest = null;
+
+    if (i === 0) {
+      name = match[1].trim();
+      duration = clampDuration(match[2], 30);
+      rest = match[3] == null ? null : clampRest(match[3], 10);
+    } else if (i === 1) {
+      duration = clampDuration(match[1], 30);
+      name = match[2].trim();
+      rest = match[3] == null ? null : clampRest(match[3], 10);
+    } else if (i === 2) {
+      name = match[1].trim();
+      duration = clampDuration(match[2], 30);
+      rest = match[3] == null ? null : clampRest(match[3], 10);
+    } else {
+      name = match[1].trim();
+      rest = match[2] == null ? null : clampRest(match[2], 10);
+      warnings.push(`Used default 30s work for "${raw}".`);
+    }
+
+    name = titleCase(name.replace(/^and\s+/i, '').trim());
+    if (!name) break;
+
+    return {
+      exercises: [{ name, duration, rest, note: '' }],
+      warnings
+    };
+  }
+
+  return {
+    exercises: [],
+    warnings: [`Could not confidently parse "${raw}".`]
+  };
+}
+
+function parseCustomExercises(text) {
+  const lines = String(text || '').split('\n');
+  const exercises = [];
+  const warnings = [];
+
+  lines.forEach((line, lineIndex) => {
+    const raw = line.trim();
+    if (!raw) return;
+
+    const parts = raw.split(',').map(part => part.trim());
+    const looksStructured = parts.length >= 2 && parts[0] && /^-?\d+$/.test(parts[1]);
+
+    if (looksStructured) {
+      const duration = clampDuration(parts[1], 30);
+      const hasRest = parts.length >= 3 && /^-?\d+$/.test(parts[2]);
+      const rest = hasRest ? clampRest(parts[2], 10) : null;
+      if (parts.length >= 3 && !hasRest) {
+        warnings.push(`Line ${lineIndex + 1}: rest value was unclear, default applied.`);
+      }
+      exercises.push({
+        name: parts[0],
+        duration,
+        rest,
+        note: ''
+      });
+      return;
+    }
+
+    const parsed = parseNaturalLanguageLine(raw);
+    if (!parsed.exercises.length) {
+      warnings.push(...parsed.warnings);
+      return;
+    }
+
+    exercises.push(...parsed.exercises);
+    warnings.push(...parsed.warnings);
+  });
+
+  const normalised = exercises.map((exercise, exerciseIndex) => ({
+    name: exercise.name || `Move ${exerciseIndex + 1}`,
+    duration: clampDuration(exercise.duration, 30),
+    rest: exercise.rest == null
+      ? (exerciseIndex < exercises.length - 1 ? 10 : 0)
+      : clampRest(exercise.rest, exerciseIndex < exercises.length - 1 ? 10 : 0),
+    note: exercise.note || ''
+  }));
+
+  return { exercises: normalised, warnings };
+}
+
+function normaliseRoutineText(exercises) {
+  return exercises.map(exercise => `${exercise.name}, ${exercise.duration}, ${exercise.rest}`).join('\n');
+}
+
 function countRoutineEntries(text) {
   const commaCount = parse(text).length;
   if (commaCount > 0) return commaCount;
@@ -119,19 +287,30 @@ function toast(message) {
 }
 
 function loadVaultData() {
+  let storedVault = {};
+
   try {
-    vault = JSON.parse(localStorage.getItem('tempo_vault')) || {};
+    storedVault = JSON.parse(localStorage.getItem('tempo_vault')) || {};
   } catch {
-    vault = {};
+    storedVault = {};
   }
 
-  vault = { ...defaults, ...vault };
+  Object.keys(storedVault).forEach(name => {
+    if (LEGACY_ROUTINE_NAMES.has(name)) {
+      delete storedVault[name];
+    }
+  });
+
+  vault = { ...storedVault };
+  vault[MAIN_DEFAULT_NAME] = MAIN_DEFAULT_TEXT;
   localStorage.setItem('tempo_vault', JSON.stringify(vault));
   populateVaultUI();
 }
 
 function populateVaultUI() {
-  dom.vaultList.innerHTML = Object.keys(vault).map(name => `
+  const routineNames = Object.keys(vault).filter(name => !LEGACY_ROUTINE_NAMES.has(name));
+
+  dom.vaultList.innerHTML = routineNames.map(name => `
     <div class="vault-item">
       <span class="font-bold">${clean(name)}</span>
       <button class="primary btn-small" type="button" data-routine-key="${encodeURIComponent(name)}">Play</button>
@@ -170,6 +349,7 @@ function showPreview(name, text) {
 }
 
 function loadExample() {
+  selected = null;
   showPreview(MAIN_DEFAULT_NAME, MAIN_DEFAULT_TEXT);
 }
 
@@ -192,6 +372,7 @@ function startWorkout(data) {
   dom.setup.classList.add('hidden');
   dom.workoutContainer.classList.remove('hidden');
 
+  requestWakeLock();
   startPhase(10);
   render();
 }
@@ -269,6 +450,7 @@ function showRest() {
 
 function finishWorkout() {
   clearInterval(timer);
+  releaseWakeLock();
   mode = 'complete';
   render();
 }
@@ -358,6 +540,7 @@ function skip() {
 
 function backToSetup() {
   clearInterval(timer);
+  releaseWakeLock();
 
   routine = null;
   index = -1;
@@ -381,16 +564,67 @@ function closeDialog(id) {
   const dialog = $(id);
 
   if (dialog && dialog.open) {
+    if (closingFromPopstate) {
+      dialog.close();
+      closingFromPopstate = false;
+      return;
+    }
     dialog.close();
   }
 }
 
 function pushStateAndShow(id) {
+  try {
+    history.pushState({ tempoOverlay: id }, '', window.location.href);
+  } catch {}
   showDialog(id);
 }
 
 function closeOverlay(id) {
+  if (history.state && history.state.tempoOverlay) {
+    suppressPopstateClose = true;
+    history.back();
+  }
   closeDialog(id);
+}
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  if (mode === 'setup' || mode === 'complete') return;
+  if (document.visibilityState !== 'visible') return;
+
+  try {
+    if (!wakeLockSentinel) {
+      wakeLockSentinel = await navigator.wakeLock.request('screen');
+      wakeLockSentinel.addEventListener('release', () => {
+        wakeLockSentinel = null;
+      });
+    }
+  } catch {}
+}
+
+function releaseWakeLock() {
+  if (wakeLockSentinel) {
+    wakeLockSentinel.release().catch(() => {});
+    wakeLockSentinel = null;
+  }
+}
+
+function closeTopDialog() {
+  const openDialogs = [
+    dom.confirmDialog,
+    dom.settingsDialog,
+    dom.customDialog,
+    dom.vaultDialog,
+    dom.previewDialog
+  ].filter(dialog => dialog && dialog.open);
+
+  const topDialog = openDialogs[0];
+  if (!topDialog) return false;
+
+  closingFromPopstate = true;
+  closeDialog(topDialog.id);
+  return true;
 }
 
 function openBuilder() {
@@ -401,21 +635,37 @@ function openBuilder() {
 }
 
 function validateAndPreview() {
-  const count = countRoutineEntries(dom.customList.value);
+  const parsed = parseCustomExercises(dom.customList.value);
+  const count = parsed.exercises.length;
   dom.btnSaveRoutine.disabled = count === 0;
-  dom.routinePreview.textContent = count
-    ? `${count} moves detected.`
-    : 'Enter movements...';
+
+  if (!count) {
+    dom.routinePreview.innerHTML = 'Enter movements...';
+    return;
+  }
+
+  const movementPreview = parsed.exercises
+    .map(exercise => `• ${clean(exercise.name)} — ${exercise.duration}s / rest ${exercise.rest}s${exercise.note ? ` (${clean(exercise.note)})` : ''}`)
+    .join('<br>');
+
+  const warningPreview = parsed.warnings.length
+    ? `<br><br><span class="text-muted">Assumptions:<br>${parsed.warnings.map(message => `• ${clean(message)}`).join('<br>')}</span>`
+    : '';
+
+  dom.routinePreview.innerHTML = `<b>${count} moves detected.</b><br>${movementPreview}${warningPreview}`;
 }
 
 function saveAndStartCustom() {
   const name = dom.routineName.value.trim() || 'Custom Routine';
-  const text = dom.customList.value.trim();
+  const parsed = parseCustomExercises(dom.customList.value);
 
-  if (!parse(text).length && !parseNaturalRoutine(text).length) {
+  if (!parsed.exercises.length) {
     toast('Add at least one movement.');
     return;
   }
+
+  const text = normaliseRoutineText(parsed.exercises);
+  dom.customList.value = text;
 
   vault[name] = text;
   localStorage.setItem('tempo_vault', JSON.stringify(vault));
@@ -425,11 +675,19 @@ function saveAndStartCustom() {
   showPreview(name, text);
 }
 
+function normaliseCustomRoutineInput() {
+  const parsed = parseCustomExercises(dom.customList.value);
+  if (!parsed.exercises.length) return false;
+
+  dom.customList.value = normaliseRoutineText(parsed.exercises);
+  dom.customList.dispatchEvent(new Event('input', { bubbles: true }));
+  return true;
+}
+
 function restoreDefaults() {
-  vault = { ...defaults };
+  vault = { [MAIN_DEFAULT_NAME]: MAIN_DEFAULT_TEXT };
   localStorage.setItem('tempo_vault', JSON.stringify(vault));
   populateVaultUI();
-  toast('Defaults restored');
 }
 
 function confirmEndSession() {
@@ -448,12 +706,39 @@ function executeConfirm() {
 }
 
 function loadSettings() {
-  dom.volumeControl.value = localStorage.getItem('tempoVolume') || 70;
+  const legacyVolume = localStorage.getItem('tempoVolume');
+  const savedSoundVolume = localStorage.getItem('tempoSoundVolume');
+  const savedVoiceVolume = localStorage.getItem('tempoVoiceVolume');
+
+  if (dom.soundVolumeControl) {
+    dom.soundVolumeControl.value = savedSoundVolume || legacyVolume || 70;
+  } else if (dom.volumeControl) {
+    dom.volumeControl.value = savedSoundVolume || legacyVolume || 70;
+  }
+
+  if (dom.voiceVolumeControl) {
+    dom.voiceVolumeControl.value = savedVoiceVolume || legacyVolume || 70;
+  }
+
   dom.audioProfile.value = localStorage.getItem('tempoAudioProfile') || 'full';
+  if (dom.voicePromptsEnabled) {
+    dom.voicePromptsEnabled.value = localStorage.getItem('tempoVoicePromptsEnabled') || 'true';
+  }
 }
 
 function saveSettings() {
-  localStorage.setItem('tempoVolume', dom.volumeControl.value);
+  const soundVolumeValue = dom.soundVolumeControl
+    ? dom.soundVolumeControl.value
+    : (dom.volumeControl ? dom.volumeControl.value : 70);
+
+  localStorage.setItem('tempoSoundVolume', soundVolumeValue);
+  localStorage.setItem('tempoVolume', soundVolumeValue);
+  if (dom.voiceVolumeControl) {
+    localStorage.setItem('tempoVoiceVolume', dom.voiceVolumeControl.value);
+  }
+  if (dom.voicePromptsEnabled) {
+    localStorage.setItem('tempoVoicePromptsEnabled', dom.voicePromptsEnabled.value);
+  }
   localStorage.setItem('tempoAudioProfile', dom.audioProfile.value);
   closeDialog('settingsDialog');
   toast('Settings saved');
@@ -480,6 +765,10 @@ function boot() {
     'settingsDialog',
     'resumeCard',
     'volumeControl',
+    'soundVolumeControl',
+    'voiceVolumeControl',
+    'voicePromptsEnabled',
+    'voiceControl',
     'customList',
     'routineName',
     'toast',
@@ -491,7 +780,8 @@ function boot() {
     'previewMovements',
     'previewTime',
     'previewList',
-    'audioProfile'
+    'audioProfile',
+    'previewVoiceBtn'
   ].forEach(id => {
     dom[id] = $(id);
   });
@@ -501,6 +791,34 @@ function boot() {
 
   dom.customList.addEventListener('input', validateAndPreview);
   dom.routineName.addEventListener('input', validateAndPreview);
+
+  [dom.previewDialog, dom.vaultDialog, dom.customDialog, dom.settingsDialog, dom.confirmDialog]
+    .filter(Boolean)
+    .forEach(dialog => {
+      dialog.addEventListener('close', () => {
+        if (closingFromPopstate) return;
+        if (history.state && history.state.tempoOverlay) {
+          suppressPopstateClose = true;
+          history.back();
+        }
+      });
+    });
+
+  window.addEventListener('popstate', () => {
+    if (suppressPopstateClose) {
+      suppressPopstateClose = false;
+      return;
+    }
+    closeTopDialog();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && mode !== 'setup' && mode !== 'complete') {
+      requestWakeLock();
+      return;
+    }
+    releaseWakeLock();
+  });
 }
 Object.assign(window, {
   loadExample,
@@ -520,6 +838,7 @@ Object.assign(window, {
   backToSetup,
   showPreview,
   validateAndPreview,
-  parseNaturalRoutine
+  parseNaturalRoutine,
+  normaliseCustomRoutineInput
 });
 document.addEventListener('DOMContentLoaded', boot);

@@ -1,18 +1,7 @@
 function normaliseRoutineBeforeSave() {
-  const listEl = document.getElementById('customList');
-  if (!listEl || !window.parseNaturalRoutine) return;
-
-  const raw = String(listEl.value || '').trim();
-  if (!raw || raw.indexOf(',') !== -1) return;
-
-  const exercises = window.parseNaturalRoutine(raw);
-  if (!Array.isArray(exercises) || exercises.length === 0) return;
-
-  listEl.value = exercises.map(function (exercise) {
-    return exercise.name + ', ' + exercise.duration + ', ' + exercise.rest;
-  }).join('\n');
-
-  listEl.dispatchEvent(new Event('input', { bubbles: true }));
+  if (window.normaliseCustomRoutineInput) {
+    window.normaliseCustomRoutineInput();
+  }
 }
 
 document.addEventListener('click', function (event) {
@@ -26,11 +15,11 @@ document.addEventListener('click', function (event) {
     settingsBtn: function () { window.pushStateAndShow && window.pushStateAndShow('settingsDialog'); },
     previewStartBtn: function () { window.confirmStartPreview && window.confirmStartPreview(); },
     previewBackBtn: function () { window.closeOverlay && window.closeOverlay('previewDialog'); },
-    restoreDefaultsBtn: function () { window.restoreDefaults && window.restoreDefaults(); },
     closeVaultBtn: function () { window.closeOverlay && window.closeOverlay('vaultDialog'); },
     btnSaveRoutine: function () { normaliseRoutineBeforeSave(); window.saveAndStartCustom && window.saveAndStartCustom(); },
     cancelBuilderBtn: function () { window.closeOverlay && window.closeOverlay('customDialog'); },
     saveSettingsBtn: function () { window.saveSettings && window.saveSettings(); },
+    previewVoiceBtn: function () { window.previewVoice && window.previewVoice(); },
     skipBtn: function () { window.skip && window.skip(); },
     pauseBtn: function () { window.togglePause && window.togglePause(); },
     endBtn: function () { window.confirmEndSession && window.confirmEndSession(); },
