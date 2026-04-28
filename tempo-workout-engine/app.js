@@ -3,10 +3,19 @@
 const $ = id => document.getElementById(id);
 const dom = {};
 
+const MAIN_DEFAULT_NAME = '4-Minute Core Workout';
+const MAIN_DEFAULT_TEXT = 'Abdominal Crunch Hold, 30, 10\nHundreds, 30, 10\nRoll-Like-A-Ball, 30, 10\nAbdominal Leg Raises, 30, 10\nLeg-To-Chest Raises, 30, 10\nCobra Pose, 30, 10\nPlank, 30, 0';
+const LEGACY_ROUTINE_NAMES = [
+  'Legacy: Monday Dumbbell Split',
+  'Legacy: Wednesday Dumbbell Split',
+  'Legacy: Friday Dumbbell Split',
+  'Monday: Biceps & Triceps',
+  'Wednesday: Shoulders & Back',
+  'Friday: Legs & Chest'
+];
+
 const defaults = {
-  'Monday: Biceps & Triceps': 'Dumbbell Curls, 30, 10\nOverhead Tricep Extension, 30, 10\nHammer Curls, 30, 10\nClose-Grip Incline Pushups, 30, 10\nTricep Kickbacks, 30, 10\nChair Dips, 30, 0',
-  'Wednesday: Shoulders & Back': 'Arnold Press, 30, 10\nOne-Arm Bench Row, 30, 10\nLateral Raises, 30, 10\nRear-Delt Fly, 30, 10\nFront Raises, 30, 10\nUpright Row With Broomstick, 30, 0',
-  'Friday: Legs & Chest': 'Goblet Squats, 30, 10\nFeet-Elevated Pushups, 30, 10\nSplit Squats, 30, 10\nSlow-Tempo Pushups, 30, 10\nRomanian Deadlift, 30, 10\nWide-Grip Pushups, 30, 0'
+  [MAIN_DEFAULT_NAME]: MAIN_DEFAULT_TEXT
 };
 
 let vault = {};
@@ -121,6 +130,10 @@ function loadVaultData() {
     vault = {};
   }
 
+  LEGACY_ROUTINE_NAMES.forEach(name => {
+    delete vault[name];
+  });
+
   vault = { ...defaults, ...vault };
   localStorage.setItem('tempo_vault', JSON.stringify(vault));
   populateVaultUI();
@@ -130,13 +143,14 @@ function populateVaultUI() {
   dom.vaultList.innerHTML = Object.keys(vault).map(name => `
     <div class="vault-item">
       <span class="font-bold">${clean(name)}</span>
-      <button class="primary btn-small" type="button" data-routine="${clean(name)}">Play</button>
+      <button class="primary btn-small" type="button" data-routine-key="${encodeURIComponent(name)}">Play</button>
     </div>
   `).join('');
 
-  dom.vaultList.querySelectorAll('button[data-routine]').forEach(button => {
+  dom.vaultList.querySelectorAll('button[data-routine-key]').forEach(button => {
     button.addEventListener('click', () => {
-      showPreview(button.dataset.routine, vault[button.dataset.routine]);
+      const routineKey = decodeURIComponent(button.dataset.routineKey || '');
+      showPreview(routineKey, vault[routineKey]);
     });
   });
 }
@@ -165,8 +179,7 @@ function showPreview(name, text) {
 }
 
 function loadExample() {
-  const firstRoutine = Object.keys(vault)[0] || Object.keys(defaults)[0];
-  showPreview(firstRoutine, vault[firstRoutine] || defaults[firstRoutine]);
+  showPreview(MAIN_DEFAULT_NAME, MAIN_DEFAULT_TEXT);
 }
 
 function confirmStartPreview() {
@@ -421,13 +434,6 @@ function saveAndStartCustom() {
   showPreview(name, text);
 }
 
-function restoreDefaults() {
-  vault = { ...defaults };
-  localStorage.setItem('tempo_vault', JSON.stringify(vault));
-  populateVaultUI();
-  toast('Defaults restored');
-}
-
 function confirmEndSession() {
   confirmAction = () => {
     closeDialog('confirmDialog');
@@ -505,7 +511,6 @@ Object.assign(window, {
   closeOverlay,
   openBuilder,
   saveAndStartCustom,
-  restoreDefaults,
   saveSettings,
   resumeSession,
   clearResumeState,
